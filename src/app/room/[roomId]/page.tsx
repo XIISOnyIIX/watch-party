@@ -28,6 +28,22 @@ export default function RoomPage({ params }: RoomPageProps) {
     params.then(p => setRoomId(p.roomId))
   }, [params])
 
+  const {
+    room,
+    user,
+    messages,
+    isConnected,
+    isHost,
+    joinRoom,
+    leaveRoom,
+    updateVideo,
+    updateVideoState,
+    sendMessage
+  } = useRoom({
+    roomId,
+    userName
+  })
+
   // Prevent auto-scrolling caused by state updates
   useEffect(() => {
     // Save current scroll position
@@ -45,22 +61,6 @@ export default function RoomPage({ params }: RoomPageProps) {
 
     return () => clearTimeout(timeoutId)
   }, [room, messages]) // Run when room or messages update
-
-  const {
-    room,
-    user,
-    messages,
-    isConnected,
-    isHost,
-    joinRoom,
-    leaveRoom,
-    updateVideo,
-    updateVideoState,
-    sendMessage
-  } = useRoom({
-    roomId,
-    userName
-  })
 
   useEffect(() => {
     const savedName = localStorage.getItem('userName')
