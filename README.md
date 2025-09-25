@@ -140,3 +140,5 @@ MIT License - feel free to use this for your own projects!
 ---
 
 Built with ❤️ for watching videos together
+
+🚀 Deploy status: Fixed syntax errors and scroll issues
