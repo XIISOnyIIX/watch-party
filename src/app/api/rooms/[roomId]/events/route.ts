@@ -121,10 +121,15 @@ export async function GET(
       }, 30000)
 
       // Clean up on close
+      let timeoutId: NodeJS.Timeout
+
       const cleanup = () => {
         console.log(`[SSE] Cleaning up connection for user ${userId} in room ${resolvedParams.roomId}`)
         clearInterval(updateInterval)
         clearInterval(heartbeatInterval)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
         // Remove user from room if they disconnect
         const leftRoom = roomStore.leaveRoom(resolvedParams.roomId, userId)
         if (leftRoom) {
@@ -137,17 +142,10 @@ export async function GET(
       request.signal.addEventListener('abort', cleanup)
 
       // Clean up after 60 minutes (increased from 30 minutes)
-      const timeoutId = setTimeout(() => {
+      timeoutId = setTimeout(() => {
         console.log(`[SSE] Connection timeout for user ${userId} in room ${resolvedParams.roomId}`)
         cleanup()
       }, 3600000) // 60 minutes
-
-      // Clean up timeout on early disconnect
-      const originalCleanup = cleanup
-      cleanup = () => {
-        clearTimeout(timeoutId)
-        originalCleanup()
-      }
     }
   })
 
