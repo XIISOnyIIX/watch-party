@@ -24,7 +24,10 @@ export default function ChatPanel({
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Scroll only the chat container, not the entire page
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
   }
 
   const isUserNearBottom = () => {
@@ -44,13 +47,24 @@ export default function ChatPanel({
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation() // Prevent event bubbling
+
     if (!newMessage.trim() || !currentUser) return
+
+    // Prevent any scroll behavior during message sending
+    const currentScrollY = window.scrollY
 
     onSendMessage(newMessage.trim())
     setNewMessage('')
 
-    // Always scroll to bottom when current user sends a message
-    setTimeout(() => scrollToBottom(), 100)
+    // Always scroll chat to bottom when current user sends a message
+    setTimeout(() => {
+      scrollToBottom()
+      // Ensure page didn't scroll
+      if (window.scrollY !== currentScrollY) {
+        window.scrollTo(0, currentScrollY)
+      }
+    }, 50)
   }
 
   const formatTime = (date: Date) => {
