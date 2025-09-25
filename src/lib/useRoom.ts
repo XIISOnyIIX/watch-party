@@ -160,7 +160,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   const updateVideo = useCallback(async (video: Video | null) => {
     if (!isHost || !roomId) return
 
-    try:
+    try {
       await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
