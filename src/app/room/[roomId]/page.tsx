@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import VideoPlayer from '@/components/VideoPlayer'
 import VideoControls from '@/components/VideoControls'
@@ -44,20 +44,31 @@ export default function RoomPage({ params }: RoomPageProps) {
     userName
   })
 
-  // Prevent auto-scrolling caused by state updates
+  // Prevent auto-scrolling caused by state updates (but not from chat messages)
+  const lastMessageCountRef = useRef(0)
+
   useEffect(() => {
-    // Save current scroll position
+    // Don't prevent scroll if new messages were added (chat should scroll)
+    const currentMessageCount = messages.length
+    const isNewMessage = currentMessageCount > lastMessageCountRef.current
+    lastMessageCountRef.current = currentMessageCount
+
+    if (isNewMessage) {
+      return // Allow chat to scroll naturally
+    }
+
+    // Save current scroll position for non-message updates
     const scrollY = window.scrollY
 
     // Restore scroll position after any potential changes
     const restoreScroll = () => {
-      if (window.scrollY !== scrollY) {
+      if (window.scrollY !== scrollY && !isNewMessage) {
         window.scrollTo(0, scrollY)
       }
     }
 
-    // Use requestAnimationFrame to check after renders
-    const timeoutId = setTimeout(restoreScroll, 100)
+    // Use timeout to check after renders
+    const timeoutId = setTimeout(restoreScroll, 50)
 
     return () => clearTimeout(timeoutId)
   }, [room, messages]) // Run when room or messages update
