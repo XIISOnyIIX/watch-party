@@ -53,10 +53,10 @@ export default function RoomPage({ params }: RoomPageProps) {
   }, [])
 
   useEffect(() => {
-    if (userName && !room) {
+    if (userName && !room && roomId) {
       joinRoom(roomName || undefined)
     }
-  }, [userName, room, joinRoom, roomName])
+  }, [userName, room, joinRoom, roomName, roomId])
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault()

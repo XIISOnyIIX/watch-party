@@ -41,7 +41,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   const isHost = user?.isHost || false
 
   const connectToRoom = useCallback(() => {
-    if (!userId || eventSourceRef.current) return
+    if (!userId || !roomId || eventSourceRef.current) return
 
     const eventSource = new EventSource(
       `/api/rooms/${roomId}/events?userId=${userId}`
@@ -95,6 +95,8 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, userId])
 
   const joinRoom = useCallback(async (roomName?: string) => {
+    if (!roomId || !userName) return
+
     try {
       const userObj: User = {
         id: userId,
@@ -156,9 +158,9 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, userId])
 
   const updateVideo = useCallback(async (video: Video | null) => {
-    if (!isHost) return
+    if (!isHost || !roomId) return
 
-    try {
+    try:
       await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -173,7 +175,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, isHost])
 
   const updateVideoState = useCallback(async (state: VideoState) => {
-    if (!isHost) return
+    if (!isHost || !roomId) return
 
     try {
       await fetch(`/api/rooms/${roomId}`, {
@@ -191,7 +193,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, isHost])
 
   const sendMessage = useCallback(async (message: string) => {
-    if (!user) return
+    if (!user || !roomId) return
 
     try {
       await fetch(`/api/rooms/${roomId}/chat`, {
