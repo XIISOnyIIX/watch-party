@@ -19,15 +19,28 @@ export default function ChatPanel({
   className = ''
 }: ChatPanelProps) {
   const [newMessage, setNewMessage] = useState('')
+  const [prevMessageCount, setPrevMessageCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const isUserNearBottom = () => {
+    if (!messagesContainerRef.current) return true
+
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
+    return scrollHeight - scrollTop - clientHeight < 100 // Within 100px of bottom
+  }
+
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    // Only auto-scroll if there are new messages and user is near bottom
+    if (messages.length > prevMessageCount && isUserNearBottom()) {
+      scrollToBottom()
+    }
+    setPrevMessageCount(messages.length)
+  }, [messages, prevMessageCount])
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,6 +48,9 @@ export default function ChatPanel({
 
     onSendMessage(newMessage.trim())
     setNewMessage('')
+
+    // Always scroll to bottom when current user sends a message
+    setTimeout(() => scrollToBottom(), 100)
   }
 
   const formatTime = (date: Date) => {
@@ -66,7 +82,7 @@ export default function ChatPanel({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 p-4 overflow-y-auto min-h-0">
+      <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto min-h-0">
         <div className="space-y-3">
           {messages.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
