@@ -31,3 +31,18 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Prevent automatic scrolling and layout shifts */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prevent iframe focus from causing scroll jumps */
+iframe {
+  scroll-margin: 0;
+}
+
+/* Stable video container */
+.aspect-video {
+  contain: layout style;
+}

@@ -39,6 +39,16 @@ export default function VideoPlayer({
   const handleYouTubeReady: YouTubeProps['onReady'] = (event) => {
     youtubeRef.current = event.target
     setIsReady(true)
+
+    // Prevent auto-focus that causes scroll jumps
+    if (event.target.getIframe) {
+      const iframe = event.target.getIframe()
+      if (iframe) {
+        iframe.style.outline = 'none'
+        iframe.tabIndex = -1
+      }
+    }
+
     onReady?.()
   }
 
@@ -143,6 +153,8 @@ export default function VideoPlayer({
       disablekb: isHost ? 0 : 1,
       modestbranding: 1,
       rel: 0,
+      iv_load_policy: 3, // Disable annotations
+      fs: 0, // Disable fullscreen
     },
   }
 
@@ -159,15 +171,18 @@ export default function VideoPlayer({
   }
 
   return (
-    <div className="aspect-video bg-black rounded-lg overflow-hidden relative">
+    <div className="aspect-video bg-black rounded-lg overflow-hidden relative" style={{ minHeight: '200px' }}>
       {video.type === 'youtube' ? (
-        <YouTube
-          videoId={getYouTubeVideoId(video.url) || ''}
-          opts={youtubeOpts}
-          onReady={handleYouTubeReady}
-          onStateChange={handleYouTubeStateChange}
-          className="w-full h-full"
-        />
+        <div className="w-full h-full">
+          <YouTube
+            videoId={getYouTubeVideoId(video.url) || ''}
+            opts={youtubeOpts}
+            onReady={handleYouTubeReady}
+            onStateChange={handleYouTubeStateChange}
+            className="w-full h-full"
+            style={{ pointerEvents: isHost ? 'auto' : 'none' }}
+          />
+        </div>
       ) : (
         <video
           ref={videoRef}
