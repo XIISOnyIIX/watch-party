@@ -43,16 +43,24 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   const connectToRoom = useCallback(() => {
     if (!userId || !roomId || eventSourceRef.current) return
 
+    console.log(`[useRoom] Connecting to room ${roomId} as user ${userId}`)
     const eventSource = new EventSource(
       `/api/rooms/${roomId}/events?userId=${userId}`
     )
 
     eventSource.onopen = () => {
+      console.log(`[useRoom] SSE connection opened for room ${roomId}`)
       setIsConnected(true)
     }
 
     eventSource.onmessage = (event) => {
       try {
+        // Skip heartbeat events
+        if (event.type === 'heartbeat') {
+          console.log(`[useRoom] Heartbeat received for room ${roomId}`)
+          return
+        }
+
         const data = JSON.parse(event.data)
 
         switch (data.type) {
@@ -68,18 +76,19 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
             break
 
           case 'room-closed':
+            console.log(`[useRoom] Room ${roomId} was closed`)
             setRoom(null)
             setIsConnected(false)
             eventSource.close()
             break
         }
       } catch (error) {
-        console.error('Error parsing SSE data:', error)
+        console.error('[useRoom] Error parsing SSE data:', error)
       }
     }
 
-    eventSource.onerror = () => {
-      console.log('SSE connection error, attempting to reconnect...')
+    eventSource.onerror = (error) => {
+      console.log(`[useRoom] SSE connection error for room ${roomId}:`, error)
       setIsConnected(false)
       eventSource.close()
       eventSourceRef.current = null
@@ -87,19 +96,22 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       // Attempt reconnection with exponential backoff
       let retryCount = 0
       const maxRetries = 5
+      const baseDelay = 2000 // Start with 2 seconds
 
       const attemptReconnect = () => {
         if (retryCount >= maxRetries) {
-          console.log('Max reconnection attempts reached')
+          console.log(`[useRoom] Max reconnection attempts reached for room ${roomId}`)
           return
         }
 
         retryCount++
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000) // Max 10 seconds
+        const delay = Math.min(baseDelay * Math.pow(2, retryCount - 1), 30000) // Max 30 seconds
+
+        console.log(`[useRoom] Reconnection attempt ${retryCount}/${maxRetries} in ${delay}ms`)
 
         setTimeout(() => {
           if (!eventSourceRef.current && roomId && userId) {
-            console.log(`Reconnection attempt ${retryCount}/${maxRetries}`)
+            console.log(`[useRoom] Attempting reconnection ${retryCount}/${maxRetries} for room ${roomId}`)
             connectToRoom()
           }
         }, delay)
@@ -112,7 +124,10 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, userId])
 
   const joinRoom = useCallback(async (roomName?: string) => {
-    if (!roomId || !userName) return
+    if (!roomId || !userName) {
+      console.error('[useRoom] Cannot join room: missing roomId or userName')
+      return
+    }
 
     try {
       const userObj: User = {
@@ -126,6 +141,8 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         ? { action, user: { ...userObj, isHost: true }, roomName }
         : { action, user: userObj }
 
+      console.log(`[useRoom] ${action === 'create' ? 'Creating' : 'Joining'} room ${roomId} as ${userName}`)
+
       const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,6 +151,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
       if (response.ok) {
         const data = await response.json()
+        console.log(`[useRoom] Successfully ${action === 'create' ? 'created' : 'joined'} room ${roomId}`)
         setRoom(data.room)
 
         const currentUser = data.room.users.find((u: User) => u.id === userId)
@@ -143,10 +161,12 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
         connectToRoom()
       } else {
-        throw new Error('Failed to join room')
+        const errorData = await response.text()
+        console.error(`[useRoom] Failed to ${action} room ${roomId}:`, response.status, errorData)
+        throw new Error(`Failed to ${action} room: ${response.status}`)
       }
     } catch (error) {
-      console.error('Error joining room:', error)
+      console.error(`[useRoom] Error ${roomName ? 'creating' : 'joining'} room:`, error)
     }
   }, [roomId, userName, userId, connectToRoom])
 
@@ -175,10 +195,14 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, userId])
 
   const updateVideo = useCallback(async (video: Video | null) => {
-    if (!isHost || !roomId) return
+    if (!isHost || !roomId) {
+      console.warn('[useRoom] Cannot update video: not host or no roomId')
+      return
+    }
 
     try {
-      await fetch(`/api/rooms/${roomId}`, {
+      console.log(`[useRoom] Updating video in room ${roomId}:`, video?.title || 'null')
+      const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -186,8 +210,16 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
           video
         })
       })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        console.error(`[useRoom] Failed to update video:`, response.status, errorData)
+        throw new Error(`Failed to update video: ${response.status}`)
+      }
+
+      console.log(`[useRoom] Video updated successfully in room ${roomId}`)
     } catch (error) {
-      console.error('Error updating video:', error)
+      console.error('[useRoom] Error updating video:', error)
     }
   }, [roomId, isHost])
 
@@ -195,7 +227,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     if (!isHost || !roomId) return
 
     try {
-      await fetch(`/api/rooms/${roomId}`, {
+      const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -204,8 +236,14 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
           currentTime: state.currentTime
         })
       })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        console.error(`[useRoom] Failed to update video state:`, response.status, errorData)
+        // Don't throw here as video state updates are frequent
+      }
     } catch (error) {
-      console.error('Error updating video state:', error)
+      console.error('[useRoom] Error updating video state:', error)
     }
   }, [roomId, isHost])
 

@@ -16,8 +16,11 @@ export async function GET(
 
   const room = roomStore.getRoom(resolvedParams.roomId)
   if (!room) {
+    console.log(`[SSE] Room ${resolvedParams.roomId} not found for user ${userId}`)
     return new Response('Room not found', { status: 404 })
   }
+
+  console.log(`[SSE] Starting SSE connection for user ${userId} in room ${resolvedParams.roomId}`)
 
   // Server-sent events setup
   const encoder = new TextEncoder()
@@ -26,24 +29,43 @@ export async function GET(
     start(controller) {
       let isClosed = false
 
-      const sendEvent = (data: any) => {
+      let lastSentData = ''
+      const sendEvent = (data: any, force = false) => {
         if (isClosed) return
         try {
-          const message = `data: ${JSON.stringify(data)}\n\n`
-          controller.enqueue(encoder.encode(message))
+          const dataString = JSON.stringify(data)
+          // Only send if data changed or forced (reduces redundant updates)
+          if (force || dataString !== lastSentData) {
+            const message = `data: ${dataString}\n\n`
+            controller.enqueue(encoder.encode(message))
+            lastSentData = dataString
+          }
         } catch (error) {
-          console.log('SSE send error:', error)
+          console.log('[SSE] Send error:', error)
           isClosed = true
+          closeController()
+        }
+      }
+
+      // Send heartbeat to maintain connection
+      const sendHeartbeat = () => {
+        if (isClosed) return
+        try {
+          const heartbeat = `event: heartbeat\ndata: ${Date.now()}\n\n`
+          controller.enqueue(encoder.encode(heartbeat))
+        } catch (error) {
+          console.log('[SSE] Heartbeat error:', error)
         }
       }
 
       const closeController = () => {
         if (isClosed) return
+        console.log(`[SSE] Closing connection for user ${userId} in room ${resolvedParams.roomId}`)
         isClosed = true
         try {
           controller.close()
         } catch (error) {
-          console.log('Controller already closed')
+          console.log('[SSE] Controller already closed:', error)
         }
       }
 
@@ -52,20 +74,33 @@ export async function GET(
         type: 'room-state',
         room: room,
         messages: chatStore.getMessages(resolvedParams.roomId)
-      })
+      }, true) // Force send initial state
 
-      // Set up polling for updates
-      const interval = setInterval(() => {
+      // Set up polling for updates (reduced frequency for stability)
+      const updateInterval = setInterval(() => {
         if (isClosed) {
-          clearInterval(interval)
+          clearInterval(updateInterval)
+          clearInterval(heartbeatInterval)
           return
         }
 
         const currentRoom = roomStore.getRoom(resolvedParams.roomId)
         if (!currentRoom) {
-          sendEvent({ type: 'room-closed' })
+          console.log(`[SSE] Room ${resolvedParams.roomId} no longer exists, closing connection`)
+          sendEvent({ type: 'room-closed' }, true)
           closeController()
-          clearInterval(interval)
+          clearInterval(updateInterval)
+          clearInterval(heartbeatInterval)
+          return
+        }
+
+        // Check if user is still in room
+        const userStillInRoom = currentRoom.users.some(u => u.id === userId)
+        if (!userStillInRoom) {
+          console.log(`[SSE] User ${userId} no longer in room ${resolvedParams.roomId}, closing connection`)
+          closeController()
+          clearInterval(updateInterval)
+          clearInterval(heartbeatInterval)
           return
         }
 
@@ -74,23 +109,45 @@ export async function GET(
           room: currentRoom,
           messages: chatStore.getMessages(resolvedParams.roomId)
         })
-      }, 2000) // Poll every 2 seconds
+      }, 5000) // Poll every 5 seconds (reduced from 2 seconds for stability)
+
+      // Send heartbeat every 30 seconds
+      const heartbeatInterval = setInterval(() => {
+        if (!isClosed) {
+          sendHeartbeat()
+        } else {
+          clearInterval(heartbeatInterval)
+        }
+      }, 30000)
 
       // Clean up on close
       const cleanup = () => {
-        clearInterval(interval)
+        console.log(`[SSE] Cleaning up connection for user ${userId} in room ${resolvedParams.roomId}`)
+        clearInterval(updateInterval)
+        clearInterval(heartbeatInterval)
         // Remove user from room if they disconnect
-        roomStore.leaveRoom(resolvedParams.roomId, userId)
+        const leftRoom = roomStore.leaveRoom(resolvedParams.roomId, userId)
+        if (leftRoom) {
+          console.log(`[SSE] User ${userId} removed from room ${resolvedParams.roomId} on disconnect`)
+        }
         closeController()
       }
 
       // Handle client disconnect
       request.signal.addEventListener('abort', cleanup)
 
-      // Clean up after 30 minutes instead of 5
-      setTimeout(() => {
+      // Clean up after 60 minutes (increased from 30 minutes)
+      const timeoutId = setTimeout(() => {
+        console.log(`[SSE] Connection timeout for user ${userId} in room ${resolvedParams.roomId}`)
         cleanup()
-      }, 1800000) // 30 minutes
+      }, 3600000) // 60 minutes
+
+      // Clean up timeout on early disconnect
+      const originalCleanup = cleanup
+      cleanup = () => {
+        clearTimeout(timeoutId)
+        originalCleanup()
+      }
     }
   })
 
