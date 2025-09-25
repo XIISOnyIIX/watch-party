@@ -44,8 +44,14 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     if (!userId || !roomId || eventSourceRef.current) return
 
     console.log(`[useRoom] Connecting to room ${roomId} as user ${userId}`)
+    // Include room name and user name to help with room recreation if needed
+    const params = new URLSearchParams({
+      userId,
+      userName: userName || 'Anonymous User',
+      roomName: room?.name || 'Watch Party Room'
+    })
     const eventSource = new EventSource(
-      `/api/rooms/${roomId}/events?userId=${userId}`
+      `/api/rooms/${roomId}/events?${params.toString()}`
     )
 
     eventSource.onopen = () => {
@@ -101,18 +107,34 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       const attemptReconnect = () => {
         if (retryCount >= maxRetries) {
           console.log(`[useRoom] Max reconnection attempts reached for room ${roomId}`)
+          console.log(`[useRoom] Final status: Room may need to be recreated manually`)
           return
         }
 
         retryCount++
         const delay = Math.min(baseDelay * Math.pow(2, retryCount - 1), 30000) // Max 30 seconds
 
-        console.log(`[useRoom] Reconnection attempt ${retryCount}/${maxRetries} in ${delay}ms`)
+        console.log(`[useRoom] Reconnection attempt ${retryCount}/${maxRetries} in ${delay}ms for room ${roomId}`)
 
         setTimeout(() => {
           if (!eventSourceRef.current && roomId && userId) {
             console.log(`[useRoom] Attempting reconnection ${retryCount}/${maxRetries} for room ${roomId}`)
-            connectToRoom()
+
+            // Before reconnecting, check if room still exists
+            fetch(`/api/rooms/${roomId}`)
+              .then(response => {
+                if (!response.ok) {
+                  console.log(`[useRoom] Room ${roomId} no longer exists (${response.status}), may need manual recreation`)
+                }
+                // Connect anyway - SSE endpoint has room recreation logic
+                connectToRoom()
+              })
+              .catch(() => {
+                console.log(`[useRoom] Failed to check room status, proceeding with reconnection`)
+                connectToRoom()
+              })
+          } else {
+            console.log(`[useRoom] Skipping reconnection - connection may already exist or missing parameters`)
           }
         }, delay)
       }
@@ -159,7 +181,11 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
           setUser(currentUser)
         }
 
-        connectToRoom()
+        // Add a small delay to avoid race condition with serverless functions
+        console.log(`[useRoom] Waiting 1 second before connecting to SSE to avoid race condition`)
+        setTimeout(() => {
+          connectToRoom()
+        }, 1000) // 1 second delay
       } else {
         const errorData = await response.text()
         console.error(`[useRoom] Failed to ${action} room ${roomId}:`, response.status, errorData)

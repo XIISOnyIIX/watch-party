@@ -14,10 +14,32 @@ export async function GET(
     return new Response('Missing userId', { status: 400 })
   }
 
-  const room = roomStore.getRoom(resolvedParams.roomId)
+  let room = roomStore.getRoom(resolvedParams.roomId)
+
+  // WORKAROUND: If room not found, try to recreate it from URL parameters
   if (!room) {
-    console.log(`[SSE] Room ${resolvedParams.roomId} not found for user ${userId}`)
-    return new Response('Room not found', { status: 404 })
+    console.log(`[SSE] Room ${resolvedParams.roomId} not found for user ${userId}, attempting to recreate`)
+
+    // Try to get room name from URL parameters
+    const roomName = searchParams.get('roomName') || 'Recovered Room'
+    const userName = searchParams.get('userName') || 'Anonymous User'
+
+    console.log(`[SSE] Attempting to recreate room ${resolvedParams.roomId} with name "${roomName}" for user ${userName}`)
+
+    try {
+      // Create a temporary user to recreate the room
+      const tempUser = {
+        id: userId,
+        name: userName,
+        isHost: true // Make first user the host
+      }
+
+      room = roomStore.createRoom(resolvedParams.roomId, roomName, tempUser)
+      console.log(`[SSE] Successfully recreated room ${resolvedParams.roomId}`)
+    } catch (error) {
+      console.error(`[SSE] Failed to recreate room ${resolvedParams.roomId}:`, error)
+      return new Response('Room not found and could not be recreated', { status: 404 })
+    }
   }
 
   console.log(`[SSE] Starting SSE connection for user ${userId} in room ${resolvedParams.roomId}`)
