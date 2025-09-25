@@ -24,9 +24,27 @@ export async function GET(
 
   const stream = new ReadableStream({
     start(controller) {
+      let isClosed = false
+
       const sendEvent = (data: any) => {
-        const message = `data: ${JSON.stringify(data)}\n\n`
-        controller.enqueue(encoder.encode(message))
+        if (isClosed) return
+        try {
+          const message = `data: ${JSON.stringify(data)}\n\n`
+          controller.enqueue(encoder.encode(message))
+        } catch (error) {
+          console.log('SSE send error:', error)
+          isClosed = true
+        }
+      }
+
+      const closeController = () => {
+        if (isClosed) return
+        isClosed = true
+        try {
+          controller.close()
+        } catch (error) {
+          console.log('Controller already closed')
+        }
       }
 
       // Send initial room state
@@ -38,10 +56,16 @@ export async function GET(
 
       // Set up polling for updates
       const interval = setInterval(() => {
+        if (isClosed) {
+          clearInterval(interval)
+          return
+        }
+
         const currentRoom = roomStore.getRoom(resolvedParams.roomId)
         if (!currentRoom) {
           sendEvent({ type: 'room-closed' })
-          controller.close()
+          closeController()
+          clearInterval(interval)
           return
         }
 
@@ -57,16 +81,16 @@ export async function GET(
         clearInterval(interval)
         // Remove user from room if they disconnect
         roomStore.leaveRoom(resolvedParams.roomId, userId)
+        closeController()
       }
 
       // Handle client disconnect
       request.signal.addEventListener('abort', cleanup)
 
-      // Clean up after 5 minutes of inactivity
+      // Clean up after 30 minutes instead of 5
       setTimeout(() => {
         cleanup()
-        controller.close()
-      }, 300000)
+      }, 1800000) // 30 minutes
     }
   })
 

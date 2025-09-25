@@ -79,16 +79,33 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     }
 
     eventSource.onerror = () => {
+      console.log('SSE connection error, attempting to reconnect...')
       setIsConnected(false)
       eventSource.close()
       eventSourceRef.current = null
 
-      // Attempt reconnection after 3 seconds
-      setTimeout(() => {
-        if (!eventSourceRef.current) {
-          connectToRoom()
+      // Attempt reconnection with exponential backoff
+      let retryCount = 0
+      const maxRetries = 5
+
+      const attemptReconnect = () => {
+        if (retryCount >= maxRetries) {
+          console.log('Max reconnection attempts reached')
+          return
         }
-      }, 3000)
+
+        retryCount++
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000) // Max 10 seconds
+
+        setTimeout(() => {
+          if (!eventSourceRef.current && roomId && userId) {
+            console.log(`Reconnection attempt ${retryCount}/${maxRetries}`)
+            connectToRoom()
+          }
+        }, delay)
+      }
+
+      attemptReconnect()
     }
 
     eventSourceRef.current = eventSource
