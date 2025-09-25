@@ -56,6 +56,7 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
     const file = event.target.files?.[0]
     if (!file || !isHost) return
 
+    console.log('[VideoControls] Starting file upload:', file.name)
     setIsUploading(true)
 
     try {
@@ -70,20 +71,23 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
       const result = await response.json()
 
       if (result.success) {
+        console.log('[VideoControls] Upload successful, creating video object:', result)
         const video: Video = {
-          id: result.filename,
-          title: file.name,
+          id: result.videoId,  // Use the UUID from the upload API
+          title: result.filename,  // Use original filename for display
           type: 'local',
           url: result.url
         }
 
+        console.log('[VideoControls] Adding video to room:', video)
         onVideoAdd(video)
       } else {
+        console.error('[VideoControls] Upload failed:', result.error)
         alert(result.error || 'Upload failed')
       }
     } catch (error) {
-      console.error('Upload error:', error)
-      alert('Upload failed')
+      console.error('[VideoControls] Upload error:', error)
+      alert('Upload failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) {
