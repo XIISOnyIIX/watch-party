@@ -34,15 +34,33 @@ body {
 
 /* Prevent automatic scrolling and layout shifts */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
+}
+
+body {
+  scroll-behavior: auto;
+  overflow-anchor: none;
 }
 
 /* Prevent iframe focus from causing scroll jumps */
 iframe {
   scroll-margin: 0;
+  pointer-events: auto;
 }
 
 /* Stable video container */
 .aspect-video {
   contain: layout style;
+  position: relative;
+}
+
+/* Prevent any auto-scrolling */
+* {
+  scroll-behavior: auto !important;
+}
+
+/* Disable smooth scrolling that might cause issues */
+*:focus {
+  scroll-margin: 0;
+  scroll-padding: 0;
 }

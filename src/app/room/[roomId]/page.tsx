@@ -28,6 +28,24 @@ export default function RoomPage({ params }: RoomPageProps) {
     params.then(p => setRoomId(p.roomId))
   }, [params])
 
+  // Prevent auto-scrolling caused by state updates
+  useEffect(() => {
+    // Save current scroll position
+    const scrollY = window.scrollY
+
+    // Restore scroll position after any potential changes
+    const restoreScroll = () => {
+      if (window.scrollY !== scrollY) {
+        window.scrollTo(0, scrollY)
+      }
+    }
+
+    // Use requestAnimationFrame to check after renders
+    const timeoutId = setTimeout(restoreScroll, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [room, messages]) // Run when room or messages update
+
   const {
     room,
     user,
