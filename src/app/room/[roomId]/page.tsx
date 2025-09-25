@@ -44,34 +44,23 @@ export default function RoomPage({ params }: RoomPageProps) {
     userName
   })
 
-  // Prevent auto-scrolling caused by state updates (but not from chat messages)
-  const lastMessageCountRef = useRef(0)
-
+  // Prevent auto-scrolling caused by room state updates only (never for messages)
   useEffect(() => {
-    // Don't prevent scroll if new messages were added (chat should scroll)
-    const currentMessageCount = messages.length
-    const isNewMessage = currentMessageCount > lastMessageCountRef.current
-    lastMessageCountRef.current = currentMessageCount
-
-    if (isNewMessage) {
-      return // Allow chat to scroll naturally
-    }
-
-    // Save current scroll position for non-message updates
+    // Save current scroll position
     const scrollY = window.scrollY
 
-    // Restore scroll position after any potential changes
+    // Only restore scroll position for room updates, not message updates
     const restoreScroll = () => {
-      if (window.scrollY !== scrollY && !isNewMessage) {
+      if (window.scrollY !== scrollY) {
         window.scrollTo(0, scrollY)
       }
     }
 
     // Use timeout to check after renders
-    const timeoutId = setTimeout(restoreScroll, 50)
+    const timeoutId = setTimeout(restoreScroll, 30)
 
     return () => clearTimeout(timeoutId)
-  }, [room, messages]) // Run when room or messages update
+  }, [room]) // Only run when room updates, NOT when messages update
 
   useEffect(() => {
     const savedName = localStorage.getItem('userName')
