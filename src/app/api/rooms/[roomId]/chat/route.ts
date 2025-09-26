@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chatStore } from '@/lib/store'
+import { databaseService } from '@/lib/database'
 import { ChatMessage } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -24,7 +24,7 @@ export async function POST(
       timestamp: new Date()
     }
 
-    chatStore.addMessage(resolvedParams.roomId, chatMessage)
+    await databaseService.addMessage(resolvedParams.roomId, chatMessage)
 
     return NextResponse.json({ success: true, message: chatMessage })
   } catch (error) {
@@ -39,7 +39,7 @@ export async function GET(
 ) {
   try {
     const resolvedParams = await params
-    const messages = chatStore.getMessages(resolvedParams.roomId)
+    const messages = await databaseService.getMessages(resolvedParams.roomId)
     return NextResponse.json({ messages })
   } catch (error) {
     console.error('Chat GET error:', error)

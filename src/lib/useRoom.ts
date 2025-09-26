@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Room, User, Video, ChatMessage, VideoState } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
+import { supabase } from '@/lib/supabase'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 interface UseRoomProps {
   roomId: string
@@ -29,7 +31,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   const [user, setUser] = useState<User | null>(null)
 
   const userIdRef = useRef<string>()
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
   // Initialize user ID
   if (!userIdRef.current) {
@@ -40,110 +42,121 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
   const isHost = user?.isHost || false
 
-  const connectToRoom = useCallback(() => {
-    if (!userId || !roomId || eventSourceRef.current) return
+  const connectToRoom = useCallback(async () => {
+    if (!userId || !roomId || channelRef.current) return
 
     console.log(`[useRoom] Connecting to room ${roomId} as user ${userId}`)
-    // Include room name and user name to help with room recreation if needed
-    const params = new URLSearchParams({
-      userId,
-      userName: userName || 'Anonymous User',
-      roomName: room?.name || 'Watch Party Room'
-    })
-    const eventSource = new EventSource(
-      `/api/rooms/${roomId}/events?${params.toString()}`
-    )
 
-    eventSource.onopen = () => {
-      console.log(`[useRoom] SSE connection opened for room ${roomId}`)
-      setIsConnected(true)
+    // First, initialize room via API (handles creation if needed)
+    try {
+      const params = new URLSearchParams({
+        userId,
+        userName: userName || 'Anonymous User',
+        roomName: room?.name || 'Watch Party Room'
+      })
+
+      const response = await fetch(`/api/rooms/${roomId}/events?${params.toString()}`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log(`[useRoom] Room ${roomId} initialized`)
+        setRoom(data.room)
+        setMessages(data.messages || [])
+
+        // Update user reference
+        const currentUser = data.room?.users?.find((u: User) => u.id === userId)
+        if (currentUser) {
+          setUser(currentUser)
+        }
+      }
+    } catch (error) {
+      console.error('[useRoom] Error initializing room:', error)
     }
 
-    eventSource.onmessage = (event) => {
-      try {
-        // Skip heartbeat events
-        if (event.type === 'heartbeat') {
-          console.log(`[useRoom] Heartbeat received for room ${roomId}`)
-          return
-        }
+    // Set up Supabase real-time subscriptions
+    const channel = supabase.channel(`room-${roomId}`)
 
-        const data = JSON.parse(event.data)
-
-        switch (data.type) {
-          case 'room-state':
+    // Subscribe to room changes
+    channel
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'rooms',
+        filter: `id=eq.${roomId}`
+      }, async (payload) => {
+        console.log('[useRoom] Room updated:', payload)
+        // Refetch room data when room changes
+        try {
+          const response = await fetch(`/api/rooms/${roomId}`)
+          if (response.ok) {
+            const data = await response.json()
             setRoom(data.room)
-            setMessages(data.messages || [])
 
             // Update user reference
             const currentUser = data.room?.users?.find((u: User) => u.id === userId)
             if (currentUser) {
               setUser(currentUser)
             }
-            break
-
-          case 'room-closed':
-            console.log(`[useRoom] Room ${roomId} was closed`)
-            setRoom(null)
-            setIsConnected(false)
-            eventSource.close()
-            break
-        }
-      } catch (error) {
-        console.error('[useRoom] Error parsing SSE data:', error)
-      }
-    }
-
-    eventSource.onerror = (error) => {
-      console.log(`[useRoom] SSE connection error for room ${roomId}:`, error)
-      setIsConnected(false)
-      eventSource.close()
-      eventSourceRef.current = null
-
-      // Attempt reconnection with exponential backoff
-      let retryCount = 0
-      const maxRetries = 5
-      const baseDelay = 2000 // Start with 2 seconds
-
-      const attemptReconnect = () => {
-        if (retryCount >= maxRetries) {
-          console.log(`[useRoom] Max reconnection attempts reached for room ${roomId}`)
-          console.log(`[useRoom] Final status: Room may need to be recreated manually`)
-          return
-        }
-
-        retryCount++
-        const delay = Math.min(baseDelay * Math.pow(2, retryCount - 1), 30000) // Max 30 seconds
-
-        console.log(`[useRoom] Reconnection attempt ${retryCount}/${maxRetries} in ${delay}ms for room ${roomId}`)
-
-        setTimeout(() => {
-          if (!eventSourceRef.current && roomId && userId) {
-            console.log(`[useRoom] Attempting reconnection ${retryCount}/${maxRetries} for room ${roomId}`)
-
-            // Before reconnecting, check if room still exists
-            fetch(`/api/rooms/${roomId}`)
-              .then(response => {
-                if (!response.ok) {
-                  console.log(`[useRoom] Room ${roomId} no longer exists (${response.status}), may need manual recreation`)
-                }
-                // Connect anyway - SSE endpoint has room recreation logic
-                connectToRoom()
-              })
-              .catch(() => {
-                console.log(`[useRoom] Failed to check room status, proceeding with reconnection`)
-                connectToRoom()
-              })
-          } else {
-            console.log(`[useRoom] Skipping reconnection - connection may already exist or missing parameters`)
           }
-        }, delay)
-      }
+        } catch (error) {
+          console.error('[useRoom] Error refetching room:', error)
+        }
+      })
 
-      attemptReconnect()
-    }
+    // Subscribe to room_users changes
+    channel
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'room_users',
+        filter: `room_id=eq.${roomId}`
+      }, async (payload) => {
+        console.log('[useRoom] Room users updated:', payload)
+        // Refetch room data when users change
+        try {
+          const response = await fetch(`/api/rooms/${roomId}`)
+          if (response.ok) {
+            const data = await response.json()
+            setRoom(data.room)
 
-    eventSourceRef.current = eventSource
-  }, [roomId, userId])
+            // Update user reference
+            const currentUser = data.room?.users?.find((u: User) => u.id === userId)
+            if (currentUser) {
+              setUser(currentUser)
+            }
+          }
+        } catch (error) {
+          console.error('[useRoom] Error refetching room:', error)
+        }
+      })
+
+    // Subscribe to chat messages
+    channel
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `room_id=eq.${roomId}`
+      }, async (payload) => {
+        console.log('[useRoom] New chat message:', payload)
+        // Refetch messages when new message arrives
+        try {
+          const response = await fetch(`/api/rooms/${roomId}/chat`)
+          if (response.ok) {
+            const data = await response.json()
+            setMessages(data.messages)
+          }
+        } catch (error) {
+          console.error('[useRoom] Error refetching messages:', error)
+        }
+      })
+
+    channel.subscribe((status) => {
+      console.log(`[useRoom] Subscription status for room ${roomId}:`, status)
+      setIsConnected(status === 'SUBSCRIBED')
+    })
+
+    channelRef.current = channel
+  }, [roomId, userId, userName, room?.name])
 
   const joinRoom = useCallback(async (roomName?: string) => {
     if (!roomId || !userName) {
@@ -198,9 +211,9 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
   const leaveRoom = useCallback(async () => {
     try {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
+        channelRef.current = null
       }
 
       await fetch(`/api/rooms/${roomId}`, {
@@ -294,8 +307,8 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+      if (channelRef.current) {
+        channelRef.current.unsubscribe()
       }
     }
   }, [])

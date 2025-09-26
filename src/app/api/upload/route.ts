@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // Generate a unique ID for the video
     const videoId = uuidv4()
-    const filename = `${videoId}-${file.name}`
+    const filename = `uploads/videos/${videoId}-${file.name}`
 
     console.log(`[Upload API] Uploading to Vercel Blob with filename: ${filename}`)
     const blob = await put(filename, file, {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { roomStore } from '@/lib/store'
+import { databaseService } from '@/lib/database'
 import { User } from '@/types'
 
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
   try {
     const resolvedParams = await params
     console.log(`[Room API GET] Fetching room ${resolvedParams.roomId}`)
-    const room = roomStore.getRoom(resolvedParams.roomId)
+    const room = await databaseService.getRoom(resolvedParams.roomId)
 
     if (!room) {
       console.log(`[Room API GET] Room ${resolvedParams.roomId} not found`)
@@ -42,7 +42,10 @@ export async function POST(
           name: user.name,
           isHost: true
         }
-        const room = roomStore.createRoom(resolvedParams.roomId, roomName, hostUser)
+        const room = await databaseService.createRoom(resolvedParams.roomId, roomName, hostUser)
+        if (!room) {
+          return NextResponse.json({ error: 'Failed to create room' }, { status: 500 })
+        }
         console.log(`[Room API] Room ${resolvedParams.roomId} created successfully`)
         return NextResponse.json({ room })
       }
@@ -54,7 +57,7 @@ export async function POST(
           name: user.name,
           isHost: false
         }
-        const room = roomStore.joinRoom(resolvedParams.roomId, joinUser)
+        const room = await databaseService.joinRoom(resolvedParams.roomId, joinUser)
         if (!room) {
           console.log(`[Room API] Failed to join room ${resolvedParams.roomId} - room not found`)
           return NextResponse.json({ error: 'Room not found' }, { status: 404 })
@@ -65,18 +68,15 @@ export async function POST(
 
       case 'leave': {
         console.log(`[Room API] User ${user.id} leaving room ${resolvedParams.roomId}`)
-        const room = roomStore.leaveRoom(resolvedParams.roomId, user.id)
-        if (!room) {
-          console.log(`[Room API] Failed to leave room ${resolvedParams.roomId} - room not found`)
-          return NextResponse.json({ error: 'Room not found' }, { status: 404 })
-        }
+        const room = await databaseService.leaveRoom(resolvedParams.roomId, user.id)
+        // Note: room will be null if it was deleted (no users left)
         console.log(`[Room API] User ${user.id} left room ${resolvedParams.roomId} successfully`)
         return NextResponse.json({ room })
       }
 
       case 'updateVideo': {
         console.log(`[Room API] Updating video in room ${resolvedParams.roomId}:`, video?.title || 'null')
-        const room = roomStore.updateVideo(resolvedParams.roomId, video)
+        const room = await databaseService.updateVideo(resolvedParams.roomId, video)
         if (!room) {
           console.log(`[Room API] Failed to update video in room ${resolvedParams.roomId} - room not found`)
           return NextResponse.json({ error: 'Room not found' }, { status: 404 })
@@ -86,7 +86,7 @@ export async function POST(
       }
 
       case 'updateState': {
-        const room = roomStore.updateVideoState(resolvedParams.roomId, isPlaying, currentTime)
+        const room = await databaseService.updateVideoState(resolvedParams.roomId, isPlaying, currentTime)
         if (!room) {
           console.log(`[Room API] Failed to update video state in room ${resolvedParams.roomId} - room not found`)
           return NextResponse.json({ error: 'Room not found' }, { status: 404 })

@@ -1,181 +1,75 @@
-import { NextRequest } from 'next/server'
-import { roomStore, chatStore } from '@/lib/store'
+import { NextRequest, NextResponse } from 'next/server'
+import { databaseService } from '@/lib/database'
 
+// This route is now simplified since we use Supabase real-time subscriptions
+// It mainly handles room recreation if needed and initial room state
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
 ) {
-  const resolvedParams = await params
-  const { searchParams } = new URL(request.url)
-  const userId = searchParams.get('userId')
-  const lastUpdate = searchParams.get('lastUpdate')
-
-  if (!userId) {
-    return new Response('Missing userId', { status: 400 })
-  }
-
-  let room = roomStore.getRoom(resolvedParams.roomId)
-
-  // WORKAROUND: If room not found, try to recreate it from URL parameters
-  if (!room) {
-    console.log(`[SSE] Room ${resolvedParams.roomId} not found for user ${userId}, attempting to recreate`)
-
-    // Try to get room name from URL parameters
-    const roomName = searchParams.get('roomName') || 'Recovered Room'
+  try {
+    const resolvedParams = await params
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
+    const roomName = searchParams.get('roomName') || 'Watch Party Room'
     const userName = searchParams.get('userName') || 'Anonymous User'
 
-    console.log(`[SSE] Attempting to recreate room ${resolvedParams.roomId} with name "${roomName}" for user ${userName}`)
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    }
 
-    try {
-      // Create a temporary user to recreate the room
-      const tempUser = {
+    console.log(`[Events API] Checking room ${resolvedParams.roomId} for user ${userId}`)
+
+    let room = await databaseService.getRoom(resolvedParams.roomId)
+
+    // If room doesn't exist, create it
+    if (!room) {
+      console.log(`[Events API] Room ${resolvedParams.roomId} not found, creating it`)
+
+      const hostUser = {
         id: userId,
         name: userName,
-        isHost: true // Make first user the host
+        isHost: true
       }
 
-      room = roomStore.createRoom(resolvedParams.roomId, roomName, tempUser)
-      console.log(`[SSE] Successfully recreated room ${resolvedParams.roomId}`)
-    } catch (error) {
-      console.error(`[SSE] Failed to recreate room ${resolvedParams.roomId}:`, error)
-      return new Response('Room not found and could not be recreated', { status: 404 })
+      room = await databaseService.createRoom(resolvedParams.roomId, roomName, hostUser)
+
+      if (!room) {
+        return NextResponse.json({ error: 'Failed to create room' }, { status: 500 })
+      }
+
+      console.log(`[Events API] Successfully created room ${resolvedParams.roomId}`)
+    } else {
+      // Room exists, just join the user if not already joined
+      const userInRoom = room.users.some(u => u.id === userId)
+      if (!userInRoom) {
+        console.log(`[Events API] Adding user ${userId} to existing room ${resolvedParams.roomId}`)
+
+        const joinUser = {
+          id: userId,
+          name: userName,
+          isHost: false
+        }
+
+        room = await databaseService.joinRoom(resolvedParams.roomId, joinUser)
+
+        if (!room) {
+          return NextResponse.json({ error: 'Failed to join room' }, { status: 500 })
+        }
+      }
     }
+
+    // Get messages for the room
+    const messages = await databaseService.getMessages(resolvedParams.roomId)
+
+    return NextResponse.json({
+      room,
+      messages,
+      message: 'Room ready for Supabase real-time subscriptions'
+    })
+
+  } catch (error) {
+    console.error('[Events API] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  console.log(`[SSE] Starting SSE connection for user ${userId} in room ${resolvedParams.roomId}`)
-
-  // Server-sent events setup
-  const encoder = new TextEncoder()
-
-  const stream = new ReadableStream({
-    start(controller) {
-      let isClosed = false
-
-      let lastSentData = ''
-      const sendEvent = (data: any, force = false) => {
-        if (isClosed) return
-        try {
-          const dataString = JSON.stringify(data)
-          // Only send if data changed or forced (reduces redundant updates)
-          if (force || dataString !== lastSentData) {
-            const message = `data: ${dataString}\n\n`
-            controller.enqueue(encoder.encode(message))
-            lastSentData = dataString
-          }
-        } catch (error) {
-          console.log('[SSE] Send error:', error)
-          isClosed = true
-          closeController()
-        }
-      }
-
-      // Send heartbeat to maintain connection
-      const sendHeartbeat = () => {
-        if (isClosed) return
-        try {
-          const heartbeat = `event: heartbeat\ndata: ${Date.now()}\n\n`
-          controller.enqueue(encoder.encode(heartbeat))
-        } catch (error) {
-          console.log('[SSE] Heartbeat error:', error)
-        }
-      }
-
-      const closeController = () => {
-        if (isClosed) return
-        console.log(`[SSE] Closing connection for user ${userId} in room ${resolvedParams.roomId}`)
-        isClosed = true
-        try {
-          controller.close()
-        } catch (error) {
-          console.log('[SSE] Controller already closed:', error)
-        }
-      }
-
-      // Send initial room state
-      sendEvent({
-        type: 'room-state',
-        room: room,
-        messages: chatStore.getMessages(resolvedParams.roomId)
-      }, true) // Force send initial state
-
-      // Set up polling for updates (reduced frequency for stability)
-      const updateInterval = setInterval(() => {
-        if (isClosed) {
-          clearInterval(updateInterval)
-          clearInterval(heartbeatInterval)
-          return
-        }
-
-        const currentRoom = roomStore.getRoom(resolvedParams.roomId)
-        if (!currentRoom) {
-          console.log(`[SSE] Room ${resolvedParams.roomId} no longer exists, closing connection`)
-          sendEvent({ type: 'room-closed' }, true)
-          closeController()
-          clearInterval(updateInterval)
-          clearInterval(heartbeatInterval)
-          return
-        }
-
-        // Check if user is still in room
-        const userStillInRoom = currentRoom.users.some(u => u.id === userId)
-        if (!userStillInRoom) {
-          console.log(`[SSE] User ${userId} no longer in room ${resolvedParams.roomId}, closing connection`)
-          closeController()
-          clearInterval(updateInterval)
-          clearInterval(heartbeatInterval)
-          return
-        }
-
-        sendEvent({
-          type: 'room-state',
-          room: currentRoom,
-          messages: chatStore.getMessages(resolvedParams.roomId)
-        })
-      }, 5000) // Poll every 5 seconds (reduced from 2 seconds for stability)
-
-      // Send heartbeat every 30 seconds
-      const heartbeatInterval = setInterval(() => {
-        if (!isClosed) {
-          sendHeartbeat()
-        } else {
-          clearInterval(heartbeatInterval)
-        }
-      }, 30000)
-
-      // Clean up on close
-      let timeoutId: NodeJS.Timeout
-
-      const cleanup = () => {
-        console.log(`[SSE] Cleaning up connection for user ${userId} in room ${resolvedParams.roomId}`)
-        clearInterval(updateInterval)
-        clearInterval(heartbeatInterval)
-        if (timeoutId) {
-          clearTimeout(timeoutId)
-        }
-        // Remove user from room if they disconnect
-        const leftRoom = roomStore.leaveRoom(resolvedParams.roomId, userId)
-        if (leftRoom) {
-          console.log(`[SSE] User ${userId} removed from room ${resolvedParams.roomId} on disconnect`)
-        }
-        closeController()
-      }
-
-      // Handle client disconnect
-      request.signal.addEventListener('abort', cleanup)
-
-      // Clean up after 60 minutes (increased from 30 minutes)
-      timeoutId = setTimeout(() => {
-        console.log(`[SSE] Connection timeout for user ${userId} in room ${resolvedParams.roomId}`)
-        cleanup()
-      }, 3600000) // 60 minutes
-    }
-  })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  })
 }
