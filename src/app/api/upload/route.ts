@@ -40,11 +40,24 @@ export async function POST(request: NextRequest) {
     console.log(`[Upload API] Uploading to Vercel Blob with filename: ${filename}`)
     const blob = await put(filename, file, {
       access: 'public',
+      addRandomSuffix: false
     })
 
     console.log(`[Upload API] Upload successful. URL: ${blob.url}`)
 
-    return NextResponse.json({
+    // Test video accessibility by making a HEAD request
+    try {
+      const testResponse = await fetch(blob.url, { method: 'HEAD' })
+      if (!testResponse.ok) {
+        console.warn(`[Upload API] Video may not be accessible: ${testResponse.status}`)
+      } else {
+        console.log(`[Upload API] Video accessibility confirmed: ${testResponse.status}`)
+      }
+    } catch (error) {
+      console.warn(`[Upload API] Could not verify video accessibility:`, error)
+    }
+
+    const response = NextResponse.json({
       success: true,
       videoId: videoId,  // Use the UUID as the video ID
       url: blob.url,
@@ -52,6 +65,13 @@ export async function POST(request: NextRequest) {
       size: file.size,
       type: file.type
     })
+
+    // Add CORS headers for cross-origin access
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+
+    return response
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(

@@ -7,6 +7,7 @@ interface ChatPanelProps {
   messages: ChatMessage[]
   users: User[]
   currentUser: User | null
+  roomCreatorId: string
   onSendMessage: (message: string) => void
   onPromoteUser?: (userId: string) => void
   onDemoteUser?: (userId: string) => void
@@ -17,6 +18,7 @@ export default function ChatPanel({
   messages,
   users,
   currentUser,
+  roomCreatorId,
   onSendMessage,
   onPromoteUser,
   onDemoteUser,
@@ -89,36 +91,59 @@ export default function ChatPanel({
           {users.map((user) => (
             <div key={user.id} className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className={`w-2 h-2 rounded-full ${user.isHost ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                <span className={`text-sm truncate ${user.isHost ? 'text-red-300' : 'text-gray-300'}`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  user.id === roomCreatorId ? 'bg-yellow-500' :
+                  user.isHost ? 'bg-red-500' : 'bg-green-500'
+                }`}></div>
+                <span className={`text-sm truncate ${
+                  user.id === roomCreatorId ? 'text-yellow-300' :
+                  user.isHost ? 'text-red-300' : 'text-gray-300'
+                }`}>
                   {user.name}
-                  {user.isHost && ' (Host)'}
+                  {user.id === roomCreatorId && ' (Creator)'}
+                  {user.isHost && user.id !== roomCreatorId && ' (Host)'}
                   {user.id === currentUser?.id && ' (You)'}
                 </span>
               </div>
 
-              {/* Host promotion/demotion buttons */}
-              {currentUser?.isHost && (
-                <div className="flex gap-1">
-                  {user.isHost ? (
-                    <button
-                      onClick={() => onDemoteUser?.(user.id)}
-                      className="px-2 py-1 text-xs bg-red-600/70 text-red-200 rounded hover:bg-red-600 transition-colors"
-                      title={user.id === currentUser.id ? "Remove your host privileges" : "Remove host privileges"}
-                    >
-                      ⬇️
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => onPromoteUser?.(user.id)}
-                      className="px-2 py-1 text-xs bg-green-600/70 text-green-200 rounded hover:bg-green-600 transition-colors"
-                      title="Grant host privileges"
-                    >
-                      ⬆️
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Host promotion/demotion buttons with proper hierarchy */}
+              {currentUser?.isHost && (() => {
+                const isRoomCreator = user.id === roomCreatorId
+                const isCurrentUserCreator = currentUser.id === roomCreatorId
+                const isSelfAction = user.id === currentUser.id
+
+                // Don't show any buttons for room creator unless they're managing themselves
+                if (isRoomCreator && !isSelfAction) {
+                  return null
+                }
+
+                // Don't show demote button for yourself unless you're the room creator
+                if (isSelfAction && !isCurrentUserCreator) {
+                  return null
+                }
+
+                return (
+                  <div className="flex gap-1">
+                    {user.isHost ? (
+                      <button
+                        onClick={() => onDemoteUser?.(user.id)}
+                        className="px-2 py-1 text-xs bg-red-600/70 text-red-200 rounded hover:bg-red-600 transition-colors"
+                        title={isSelfAction ? "Remove your host privileges" : "Remove host privileges"}
+                      >
+                        ⬇️
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onPromoteUser?.(user.id)}
+                        className="px-2 py-1 text-xs bg-green-600/70 text-green-200 rounded hover:bg-green-600 transition-colors"
+                        title="Grant host privileges"
+                      >
+                        ⬆️
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           ))}
         </div>

@@ -10,6 +10,7 @@ class RoomStore {
     const room: Room = {
       id: roomId,
       name: roomName,
+      creatorId: hostUser.id,
       currentVideo: null,
       users: [hostUser],
       isPlaying: false,

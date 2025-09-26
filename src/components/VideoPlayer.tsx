@@ -29,6 +29,8 @@ export default function VideoPlayer({
   const [isBuffering, setIsBuffering] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isScrolling, setIsScrolling] = useState(false)
+  const [videoError, setVideoError] = useState<string>('')
+  const [retryCount, setRetryCount] = useState(0)
 
   const syncTimeRef = useRef<number>(0)
   const lastSyncTimeRef = useRef<number>(0)
@@ -61,6 +63,75 @@ export default function VideoPlayer({
       clearTimeout(scrollTimeout)
     }
   }, [])
+
+  // Reset error state when video changes
+  useEffect(() => {
+    setVideoError('')
+    setRetryCount(0)
+    setIsBuffering(false)
+  }, [video?.id])
+
+  // Retry function for failed videos
+  const retryVideoLoad = useCallback(() => {
+    if (retryCount >= 3) {
+      setVideoError('Video failed to load after multiple attempts. The file may not be accessible from your network.')
+      return
+    }
+
+    console.log(`[VideoPlayer] Retrying video load, attempt ${retryCount + 1}`)
+    setVideoError('')
+    setIsBuffering(true)
+    setRetryCount(prev => prev + 1)
+
+    if (videoRef.current) {
+      // Force reload by changing src
+      const currentSrc = videoRef.current.src
+      videoRef.current.src = ''
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.src = currentSrc
+          videoRef.current.load()
+        }
+      }, 100)
+    }
+  }, [retryCount])
+
+  // Video error handling with retry logic
+  const handleVideoError = useCallback((error: any) => {
+    console.error('[VideoPlayer] Video error:', error)
+
+    const errorElement = error.target || videoRef.current
+    if (errorElement) {
+      const networkState = errorElement.networkState
+      const errorCode = errorElement.error?.code
+
+      let errorMessage = 'Video failed to load'
+
+      switch (errorCode) {
+        case 1: // MEDIA_ERR_ABORTED
+          errorMessage = 'Video loading was aborted'
+          break
+        case 2: // MEDIA_ERR_NETWORK
+          errorMessage = 'Network error while loading video'
+          break
+        case 3: // MEDIA_ERR_DECODE
+          errorMessage = 'Video format not supported'
+          break
+        case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+          errorMessage = 'Video source not accessible'
+          break
+      }
+
+      console.log(`[VideoPlayer] Video error details: networkState=${networkState}, errorCode=${errorCode}`)
+
+      if (retryCount < 3) {
+        setTimeout(retryVideoLoad, 1000) // Retry after 1 second
+      } else {
+        setVideoError(errorMessage)
+        setIsBuffering(false)
+      }
+    }
+  }, [retryCount, retryVideoLoad])
 
   const getYouTubeVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
@@ -259,10 +330,7 @@ export default function VideoPlayer({
           onCanPlay={() => setIsBuffering(false)}
           onLoadStart={() => setIsBuffering(true)}
           onLoadedData={() => setIsBuffering(false)}
-          onError={(e) => {
-            console.error('[VideoPlayer] Video error:', e)
-            setIsBuffering(false)
-          }}
+          onError={handleVideoError}
           onStalled={() => {
             console.log('[VideoPlayer] Video stalled')
             setIsBuffering(true)
@@ -292,11 +360,30 @@ export default function VideoPlayer({
       )}
 
       {/* Buffering indicator */}
-      {isBuffering && (
+      {isBuffering && !videoError && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
           <div className="bg-black/70 rounded-lg px-4 py-2 flex items-center gap-2">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-            <span className="text-white text-sm">Buffering...</span>
+            <span className="text-white text-sm">
+              {retryCount > 0 ? `Retrying... (${retryCount}/3)` : 'Buffering...'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Video error indicator */}
+      {videoError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="bg-red-900/80 rounded-lg px-6 py-4 text-center max-w-md mx-4">
+            <div className="text-red-200 text-sm mb-3">{videoError}</div>
+            {retryCount < 3 && (
+              <button
+                onClick={retryVideoLoad}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+              >
+                Retry ({retryCount}/3)
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -34,6 +34,7 @@ export class DatabaseService {
         .insert({
           id: roomId,
           name: roomName,
+          creator_id: hostUser.id,
           is_playing: false,
           current_position: 0
         })
@@ -450,6 +451,32 @@ export class DatabaseService {
         return null
       }
 
+      // Get room info to check creator
+      const { data: roomData, error: roomError } = await this.getClient()
+        .from('rooms')
+        .select('creator_id')
+        .eq('id', roomId)
+        .single()
+
+      if (roomError || !roomData) {
+        console.error('[DatabaseService] Error getting room data:', roomError)
+        return null
+      }
+
+      const roomCreatorId = roomData.creator_id
+
+      // Prevent demoting the room creator unless they're demoting themselves
+      if (targetUserId === roomCreatorId && requesterId !== roomCreatorId) {
+        console.error('[DatabaseService] Cannot demote room creator unless they demote themselves')
+        return null
+      }
+
+      // Prevent users from demoting themselves (except room creator)
+      if (requesterId === targetUserId && requesterId !== roomCreatorId) {
+        console.error('[DatabaseService] Users cannot demote themselves (only room creator can)')
+        return null
+      }
+
       // Check how many hosts are in the room
       const { data: allHosts, error: hostsError } = await this.getClient()
         .from('room_users')
@@ -462,13 +489,13 @@ export class DatabaseService {
         return null
       }
 
-      // Don't allow demoting the last host
+      // Don't allow demoting the last host (room creator should always remain if alone)
       if (allHosts.length <= 1) {
         console.error('[DatabaseService] Cannot demote the last host in the room')
         return null
       }
 
-      // Allow demoting anyone, including yourself, as long as there's another host
+      // Demote the target user
       const { error: demoteError } = await this.getClient()
         .from('room_users')
         .update({ is_host: false })
@@ -502,6 +529,7 @@ export class DatabaseService {
     return {
       id: roomData.id,
       name: roomData.name,
+      creatorId: roomData.creator_id,
       currentVideo,
       users,
       isPlaying: roomData.is_playing,

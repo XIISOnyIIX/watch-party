@@ -341,6 +341,7 @@ export default function RoomPage({ params }: RoomPageProps) {
               messages={messages}
               users={room.users}
               currentUser={user}
+              roomCreatorId={room.creatorId}
               onSendMessage={sendMessage}
               onPromoteUser={promoteUser}
               onDemoteUser={demoteUser}
