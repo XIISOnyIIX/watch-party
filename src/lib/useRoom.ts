@@ -47,10 +47,16 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   // Helper function to refetch room data
   const refetchRoomData = useCallback(async () => {
     try {
+      console.log(`[useRoom] Refetching room data for room ${roomId}`)
       const response = await fetch(`/api/rooms/${roomId}`)
       if (response.ok) {
         const data = await response.json()
+        const userCountBefore = room?.users?.length || 0
+        const userCountAfter = data.room?.users?.length || 0
+
+        console.log(`[useRoom] Room data updated - users: ${userCountBefore} -> ${userCountAfter}`)
         setRoom(data.room)
+
         const currentUser = data.room?.users?.find((u: User) => u.id === userId)
         if (currentUser) {
           setUser(currentUser)
@@ -66,11 +72,13 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
           channelRef.current.unsubscribe()
           channelRef.current = null
         }
+      } else {
+        console.warn(`[useRoom] Failed to refetch room data: ${response.status}`)
       }
     } catch (error) {
       console.error('[useRoom] Error refetching room:', error)
     }
-  }, [roomId, userId])
+  }, [roomId, userId, room?.users?.length])
 
   // Helper function to refetch messages
   const refetchMessages = useCallback(async () => {
@@ -87,6 +95,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
   // Polling fallback for when real-time doesn't work
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const userListPollingRef = useRef<NodeJS.Timeout | null>(null)
 
   const startPolling = useCallback(() => {
     if (pollingIntervalRef.current) return
@@ -95,14 +104,28 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     pollingIntervalRef.current = setInterval(() => {
       refetchRoomData()
       refetchMessages()
-    }, 2000) // Poll every 2 seconds for better user list updates
+    }, 1500) // Poll every 1.5 seconds for faster user list updates
   }, [refetchRoomData, refetchMessages])
+
+  const startUserListPolling = useCallback(() => {
+    if (userListPollingRef.current) return
+
+    console.log('[useRoom] Starting aggressive user list polling')
+    userListPollingRef.current = setInterval(() => {
+      refetchRoomData() // Focus on user list updates
+    }, 1000) // Poll every 1 second specifically for user changes
+  }, [refetchRoomData])
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current)
       pollingIntervalRef.current = null
-      console.log('[useRoom] Stopped polling')
+      console.log('[useRoom] Stopped general polling')
+    }
+    if (userListPollingRef.current) {
+      clearInterval(userListPollingRef.current)
+      userListPollingRef.current = null
+      console.log('[useRoom] Stopped user list polling')
     }
   }, [])
 
@@ -162,10 +185,12 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         filter: `room_id=eq.${roomId}`
       }, (payload) => {
         console.log('[useRoom] Room users changed:', payload.eventType, payload.old, payload.new)
-        // Force immediate refetch for user changes
+        // Immediate refetch for user changes - no delay
+        refetchRoomData()
+        // Also refetch again after a short delay to catch any race conditions
         setTimeout(() => {
           refetchRoomData()
-        }, 100)
+        }, 500)
       })
       .on('postgres_changes', {
         event: 'INSERT',
@@ -182,6 +207,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       console.log('[useRoom] Real-time subscription timed out, falling back to polling')
       setIsConnected(true) // Set connected even if real-time fails
       startPolling()
+      startUserListPolling() // Start aggressive user list polling
     }, 5000) // 5 second timeout
 
     channel.subscribe((status) => {
@@ -189,17 +215,19 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       if (status === 'SUBSCRIBED') {
         clearTimeout(subscribeTimeout)
         setIsConnected(true)
+        startUserListPolling() // Start user list polling even with real-time for extra reliability
         console.log('[useRoom] Real-time connection successful')
       } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
         clearTimeout(subscribeTimeout)
         console.log('[useRoom] Real-time connection failed, falling back to polling')
         setIsConnected(true) // Still set connected for polling fallback
         startPolling()
+        startUserListPolling() // Start aggressive user list polling
       }
     })
 
     channelRef.current = channel
-  }, [roomId, userId, userName, room?.name, refetchRoomData, refetchMessages, startPolling])
+  }, [roomId, userId, userName, room?.name, refetchRoomData, refetchMessages, startPolling, startUserListPolling])
 
   const joinRoom = useCallback(async (roomName?: string) => {
     if (!roomId || !userName) {
@@ -443,9 +471,24 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       stopPolling()
       if (channelRef.current) {
         channelRef.current.unsubscribe()
+        channelRef.current = null
       }
     }
   }, [stopPolling])
+
+  // Force refresh every 30 seconds as a backup to catch any missed updates
+  useEffect(() => {
+    if (!roomId || !isConnected) return
+
+    const forceRefreshInterval = setInterval(() => {
+      console.log('[useRoom] Force refresh backup - checking for missed updates')
+      refetchRoomData()
+    }, 30000) // Every 30 seconds
+
+    return () => {
+      clearInterval(forceRefreshInterval)
+    }
+  }, [roomId, isConnected, refetchRoomData])
 
   return {
     room,
