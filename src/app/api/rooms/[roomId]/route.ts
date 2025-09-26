@@ -31,7 +31,7 @@ export async function POST(
   try {
     const resolvedParams = await params
     const body = await request.json()
-    const { action, user, video, isPlaying, currentTime, roomName } = body
+    const { action, user, video, isPlaying, currentTime, roomName, targetUserId } = body
     console.log(`[Room API POST] Action: ${action} for room ${resolvedParams.roomId}`, { userId: user?.id, userName: user?.name })
 
     switch (action) {
@@ -91,6 +91,28 @@ export async function POST(
           console.log(`[Room API] Failed to update video state in room ${resolvedParams.roomId} - room not found`)
           return NextResponse.json({ error: 'Room not found' }, { status: 404 })
         }
+        return NextResponse.json({ room })
+      }
+
+      case 'promoteUser': {
+        console.log(`[Room API] Promoting user ${targetUserId} to host in room ${resolvedParams.roomId}`)
+        const room = await databaseService.promoteUser(resolvedParams.roomId, user.id, targetUserId)
+        if (!room) {
+          console.log(`[Room API] Failed to promote user in room ${resolvedParams.roomId}`)
+          return NextResponse.json({ error: 'Failed to promote user' }, { status: 400 })
+        }
+        console.log(`[Room API] User ${targetUserId} promoted to host successfully`)
+        return NextResponse.json({ room })
+      }
+
+      case 'demoteUser': {
+        console.log(`[Room API] Demoting user ${targetUserId} from host in room ${resolvedParams.roomId}`)
+        const room = await databaseService.demoteUser(resolvedParams.roomId, user.id, targetUserId)
+        if (!room) {
+          console.log(`[Room API] Failed to demote user in room ${resolvedParams.roomId}`)
+          return NextResponse.json({ error: 'Failed to demote user' }, { status: 400 })
+        }
+        console.log(`[Room API] User ${targetUserId} demoted from host successfully`)
         return NextResponse.json({ room })
       }
 

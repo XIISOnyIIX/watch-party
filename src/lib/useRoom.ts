@@ -22,6 +22,8 @@ interface UseRoomReturn {
   updateVideo: (video: Video | null) => Promise<void>
   updateVideoState: (state: VideoState) => Promise<void>
   sendMessage: (message: string) => Promise<void>
+  promoteUser: (targetUserId: string) => Promise<void>
+  demoteUser: (targetUserId: string) => Promise<void>
 }
 
 export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
@@ -356,6 +358,64 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     }
   }, [roomId, user])
 
+  const promoteUser = useCallback(async (targetUserId: string) => {
+    if (!isHost || !roomId || !user) {
+      console.warn('[useRoom] Cannot promote user: not host or missing data')
+      return
+    }
+
+    try {
+      console.log(`[useRoom] Promoting user ${targetUserId} in room ${roomId}`)
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'promoteUser',
+          user: { id: user.id },
+          targetUserId
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        console.error(`[useRoom] Failed to promote user:`, response.status, errorData)
+      } else {
+        console.log(`[useRoom] User ${targetUserId} promoted successfully`)
+      }
+    } catch (error) {
+      console.error('[useRoom] Error promoting user:', error)
+    }
+  }, [roomId, isHost, user])
+
+  const demoteUser = useCallback(async (targetUserId: string) => {
+    if (!isHost || !roomId || !user) {
+      console.warn('[useRoom] Cannot demote user: not host or missing data')
+      return
+    }
+
+    try {
+      console.log(`[useRoom] Demoting user ${targetUserId} in room ${roomId}`)
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'demoteUser',
+          user: { id: user.id },
+          targetUserId
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        console.error(`[useRoom] Failed to demote user:`, response.status, errorData)
+      } else {
+        console.log(`[useRoom] User ${targetUserId} demoted successfully`)
+      }
+    } catch (error) {
+      console.error('[useRoom] Error demoting user:', error)
+    }
+  }, [roomId, isHost, user])
+
   // Periodic cleanup for inactive rooms/users
   useEffect(() => {
     const runCleanup = async () => {
@@ -394,6 +454,8 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     leaveRoom,
     updateVideo,
     updateVideoState,
-    sendMessage
+    sendMessage,
+    promoteUser,
+    demoteUser
   }
 }

@@ -396,6 +396,86 @@ export class DatabaseService {
     }
   }
 
+  async promoteUser(roomId: string, requesterId: string, targetUserId: string): Promise<Room | null> {
+    try {
+      console.log(`[DatabaseService] User ${requesterId} promoting ${targetUserId} to host in room ${roomId}`)
+
+      // Check if requester is a host
+      const { data: requesterData, error: requesterError } = await this.getClient()
+        .from('room_users')
+        .select('is_host')
+        .eq('room_id', roomId)
+        .eq('user_id', requesterId)
+        .single()
+
+      if (requesterError || !requesterData?.is_host) {
+        console.error('[DatabaseService] Only hosts can promote users')
+        return null
+      }
+
+      // Promote target user to host
+      const { error: promoteError } = await this.getClient()
+        .from('room_users')
+        .update({ is_host: true })
+        .eq('room_id', roomId)
+        .eq('user_id', targetUserId)
+
+      if (promoteError) {
+        console.error('[DatabaseService] Error promoting user:', promoteError)
+        return null
+      }
+
+      console.log(`[DatabaseService] User ${targetUserId} promoted to host successfully`)
+      return this.getRoom(roomId)
+    } catch (error) {
+      console.error('[DatabaseService] Error in promoteUser:', error)
+      return null
+    }
+  }
+
+  async demoteUser(roomId: string, requesterId: string, targetUserId: string): Promise<Room | null> {
+    try {
+      console.log(`[DatabaseService] User ${requesterId} demoting ${targetUserId} from host in room ${roomId}`)
+
+      // Check if requester is a host
+      const { data: requesterData, error: requesterError } = await this.getClient()
+        .from('room_users')
+        .select('is_host')
+        .eq('room_id', roomId)
+        .eq('user_id', requesterId)
+        .single()
+
+      if (requesterError || !requesterData?.is_host) {
+        console.error('[DatabaseService] Only hosts can demote users')
+        return null
+      }
+
+      // Check if target is the same as requester (can't demote yourself)
+      if (requesterId === targetUserId) {
+        console.error('[DatabaseService] Cannot demote yourself')
+        return null
+      }
+
+      // Demote target user from host
+      const { error: demoteError } = await this.getClient()
+        .from('room_users')
+        .update({ is_host: false })
+        .eq('room_id', roomId)
+        .eq('user_id', targetUserId)
+
+      if (demoteError) {
+        console.error('[DatabaseService] Error demoting user:', demoteError)
+        return null
+      }
+
+      console.log(`[DatabaseService] User ${targetUserId} demoted from host successfully`)
+      return this.getRoom(roomId)
+    } catch (error) {
+      console.error('[DatabaseService] Error in demoteUser:', error)
+      return null
+    }
+  }
+
   private formatRoom(roomData: any, users: User[]): Room {
     const currentVideo = roomData.current_video_id
       ? {

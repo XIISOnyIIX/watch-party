@@ -8,6 +8,8 @@ interface ChatPanelProps {
   users: User[]
   currentUser: User | null
   onSendMessage: (message: string) => void
+  onPromoteUser?: (userId: string) => void
+  onDemoteUser?: (userId: string) => void
   className?: string
 }
 
@@ -16,6 +18,8 @@ export default function ChatPanel({
   users,
   currentUser,
   onSendMessage,
+  onPromoteUser,
+  onDemoteUser,
   className = ''
 }: ChatPanelProps) {
   const [newMessage, setNewMessage] = useState('')
@@ -81,15 +85,40 @@ export default function ChatPanel({
         <h3 className="text-lg font-semibold text-white mb-3">
           Viewers ({users.length})
         </h3>
-        <div className="space-y-2 max-h-24 overflow-y-auto">
+        <div className="space-y-2 max-h-32 overflow-y-auto">
           {users.map((user) => (
-            <div key={user.id} className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${user.isHost ? 'bg-red-500' : 'bg-green-500'}`}></div>
-              <span className={`text-sm ${user.isHost ? 'text-red-300' : 'text-gray-300'}`}>
-                {user.name}
-                {user.isHost && ' (Host)'}
-                {user.id === currentUser?.id && ' (You)'}
-              </span>
+            <div key={user.id} className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className={`w-2 h-2 rounded-full ${user.isHost ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                <span className={`text-sm truncate ${user.isHost ? 'text-red-300' : 'text-gray-300'}`}>
+                  {user.name}
+                  {user.isHost && ' (Host)'}
+                  {user.id === currentUser?.id && ' (You)'}
+                </span>
+              </div>
+
+              {/* Host promotion/demotion buttons */}
+              {currentUser?.isHost && user.id !== currentUser.id && (
+                <div className="flex gap-1">
+                  {user.isHost ? (
+                    <button
+                      onClick={() => onDemoteUser?.(user.id)}
+                      className="px-2 py-1 text-xs bg-red-600/70 text-red-200 rounded hover:bg-red-600 transition-colors"
+                      title="Remove host privileges"
+                    >
+                      ⬇️
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onPromoteUser?.(user.id)}
+                      className="px-2 py-1 text-xs bg-green-600/70 text-green-200 rounded hover:bg-green-600 transition-colors"
+                      title="Grant host privileges"
+                    >
+                      ⬆️
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

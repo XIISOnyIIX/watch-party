@@ -41,7 +41,9 @@ export default function RoomPage({ params }: RoomPageProps) {
     leaveRoom,
     updateVideo,
     updateVideoState,
-    sendMessage
+    sendMessage,
+    promoteUser,
+    demoteUser
   } = useRoom({
     roomId,
     userName
@@ -96,6 +98,36 @@ export default function RoomPage({ params }: RoomPageProps) {
       })
     }
   }, [userName, room, joinRoom, roomName, roomId, isLeaving])
+
+  // Handle browser close/refresh - automatically leave room
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (user && roomId) {
+        // Use sendBeacon for more reliable cleanup when browser closes
+        const data = JSON.stringify({
+          action: 'leave',
+          user: { id: user.id }
+        })
+
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(`/api/rooms/${roomId}`, data)
+        } else {
+          // Fallback for browsers without sendBeacon
+          fetch(`/api/rooms/${roomId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: data,
+            keepalive: true
+          }).catch(() => {}) // Ignore errors on page unload
+        }
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [user, roomId])
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -310,6 +342,8 @@ export default function RoomPage({ params }: RoomPageProps) {
               users={room.users}
               currentUser={user}
               onSendMessage={sendMessage}
+              onPromoteUser={promoteUser}
+              onDemoteUser={demoteUser}
               className="h-[600px]"
             />
           </div>
