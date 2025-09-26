@@ -25,6 +25,7 @@ export interface Database {
           name: string
           current_video_id: string | null
           current_video_title: string | null
+          current_video_type: string | null
           current_video_url: string | null
           current_video_thumbnail: string | null
           is_playing: boolean

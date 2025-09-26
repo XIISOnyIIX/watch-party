@@ -327,6 +327,7 @@ export class DatabaseService {
       ? {
           id: roomData.current_video_id,
           title: roomData.current_video_title,
+          type: roomData.current_video_type as 'youtube' | 'local',
           url: roomData.current_video_url,
           thumbnail: roomData.current_video_thumbnail
         }
