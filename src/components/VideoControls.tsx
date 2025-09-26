@@ -5,11 +5,13 @@ import { Video } from '@/types'
 
 interface VideoControlsProps {
   onVideoAdd: (video: Video) => void
+  onVideoClear: () => void
+  currentVideo: Video | null
   isHost: boolean
   className?: string
 }
 
-export default function VideoControls({ onVideoAdd, isHost, className = '' }: VideoControlsProps) {
+export default function VideoControls({ onVideoAdd, onVideoClear, currentVideo, isHost, className = '' }: VideoControlsProps) {
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -103,7 +105,8 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
           id: result.videoId,  // Use the UUID from the upload API
           title: result.filename,  // Use original filename for display
           type: 'local',
-          url: result.url
+          url: result.url,
+          thumbnail: undefined  // No thumbnail for local videos
         }
 
         console.log('[VideoControls] Adding video to room:', video)
@@ -152,8 +155,9 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
             <button
               onClick={handleYouTubeAdd}
               disabled={!youtubeUrl}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
+              <span>🎥</span>
               Add
             </button>
           </div>
@@ -182,18 +186,16 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              className="w-full px-4 py-3 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 font-medium"
             >
               {isUploading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-transparent"></div>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                   Uploading...
                 </>
               ) : (
                 <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
+                  <span>📁</span>
                   Choose Video File
                 </>
               )}
@@ -203,6 +205,19 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
             Supports MP4, WebM, OGG. Max 2GB.
           </p>
         </div>
+
+        {/* Clear Video Button */}
+        {currentVideo && (
+          <div className="pt-4 border-t border-gray-600">
+            <button
+              onClick={onVideoClear}
+              className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors flex items-center justify-center gap-2"
+            >
+              <span>✕</span>
+              Clear Current Video
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

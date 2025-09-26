@@ -90,6 +90,10 @@ export default function RoomPage({ params }: RoomPageProps) {
     await updateVideo(video)
   }
 
+  const handleVideoClear = async () => {
+    await updateVideo(null)
+  }
+
   const handleVideoStateChange = async (state: VideoState) => {
     await updateVideoState(state)
   }
@@ -203,12 +207,18 @@ export default function RoomPage({ params }: RoomPageProps) {
             {room.currentVideo && (
               <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4">
                 <div className="flex items-start gap-4">
-                  {room.currentVideo.thumbnail && (
+                  {room.currentVideo.thumbnail ? (
                     <img
                       src={room.currentVideo.thumbnail}
                       alt={room.currentVideo.title}
                       className="w-20 h-15 object-cover rounded-lg"
                     />
+                  ) : (
+                    <div className="w-20 h-15 bg-gray-700 rounded-lg flex items-center justify-center">
+                      <span className="text-2xl">
+                        {room.currentVideo.type === 'youtube' ? '🎥' : '📁'}
+                      </span>
+                    </div>
                   )}
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-white mb-1">
@@ -234,6 +244,8 @@ export default function RoomPage({ params }: RoomPageProps) {
             {/* Video Controls */}
             <VideoControls
               onVideoAdd={handleVideoAdd}
+              onVideoClear={handleVideoClear}
+              currentVideo={room.currentVideo}
               isHost={isHost}
             />
           </div>

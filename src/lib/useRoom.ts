@@ -335,6 +335,24 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     }
   }, [roomId, user])
 
+  // Periodic cleanup for inactive rooms/users
+  useEffect(() => {
+    const runCleanup = async () => {
+      try {
+        await fetch('/api/cleanup', { method: 'POST' })
+      } catch (error) {
+        console.log('[useRoom] Cleanup failed (non-critical):', error)
+      }
+    }
+
+    // Run cleanup every 10 minutes
+    const cleanupInterval = setInterval(runCleanup, 10 * 60 * 1000)
+
+    return () => {
+      clearInterval(cleanupInterval)
+    }
+  }, [])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {

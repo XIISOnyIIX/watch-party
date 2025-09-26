@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './supabase'
 import { Room, User, Video, ChatMessage } from '@/types'
+import { del } from '@vercel/blob'
 
 export class DatabaseService {
   private getClient() {
@@ -7,6 +8,20 @@ export class DatabaseService {
       throw new Error('Supabase admin client not available - missing SUPABASE_SERVICE_ROLE_KEY')
     }
     return supabaseAdmin
+  }
+
+  private async cleanupBlobFile(url: string): Promise<void> {
+    try {
+      // Only delete files from our blob storage, not external URLs
+      if (url && url.includes('blob.vercel-storage.com')) {
+        console.log(`[DatabaseService] Cleaning up blob file: ${url}`)
+        await del(url)
+        console.log(`[DatabaseService] Successfully deleted blob file: ${url}`)
+      }
+    } catch (error) {
+      console.error('[DatabaseService] Error cleaning up blob file:', error)
+      // Don't throw - cleanup failures shouldn't break the main operation
+    }
   }
   // Room operations
   async createRoom(roomId: string, roomName: string, hostUser: User): Promise<Room | null> {
@@ -158,8 +173,15 @@ export class DatabaseService {
       }
 
       if (remainingUsers.length === 0) {
-        // No users left, delete the room
+        // No users left, delete the room and clean up any blob files
         console.log(`[DatabaseService] Room ${roomId} is now empty, deleting`)
+
+        // Get room data to clean up video files before deletion
+        const roomToDelete = await this.getRoom(roomId)
+        if (roomToDelete?.currentVideo?.url && roomToDelete.currentVideo.type === 'local') {
+          await this.cleanupBlobFile(roomToDelete.currentVideo.url)
+        }
+
         await this.getClient().from('rooms').delete().eq('id', roomId)
         return null
       } else {
@@ -184,6 +206,12 @@ export class DatabaseService {
   async updateVideo(roomId: string, video: Video | null): Promise<Room | null> {
     try {
       console.log(`[DatabaseService] Updating video in room ${roomId}:`, video?.title || 'null')
+
+      // Get current video to clean up old blob files
+      const currentRoom = await this.getRoom(roomId)
+      if (currentRoom?.currentVideo?.url && currentRoom.currentVideo.type === 'local') {
+        await this.cleanupBlobFile(currentRoom.currentVideo.url)
+      }
 
       const updateData = video
         ? {
