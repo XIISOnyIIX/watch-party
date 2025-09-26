@@ -2,6 +2,8 @@
 
 A beautiful, real-time video streaming platform that allows you to watch YouTube videos and local files together with friends. Built with Next.js and designed for seamless deployment on Vercel.
 
+> Now with improved TypeScript support and database integration!
+
 ## Features
 
 ✨ **Real-time Synchronization** - Watch videos in perfect sync with friends
