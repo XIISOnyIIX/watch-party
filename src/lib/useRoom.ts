@@ -42,6 +42,57 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
   const isHost = user?.isHost || false
 
+  // Helper function to refetch room data
+  const refetchRoomData = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setRoom(data.room)
+        const currentUser = data.room?.users?.find((u: User) => u.id === userId)
+        if (currentUser) {
+          setUser(currentUser)
+        }
+      }
+    } catch (error) {
+      console.error('[useRoom] Error refetching room:', error)
+    }
+  }, [roomId, userId])
+
+  // Helper function to refetch messages
+  const refetchMessages = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/chat`)
+      if (response.ok) {
+        const data = await response.json()
+        setMessages(data.messages)
+      }
+    } catch (error) {
+      console.error('[useRoom] Error refetching messages:', error)
+    }
+  }, [roomId])
+
+  // Polling fallback for when real-time doesn't work
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return
+
+    console.log('[useRoom] Starting polling fallback')
+    pollingIntervalRef.current = setInterval(() => {
+      refetchRoomData()
+      refetchMessages()
+    }, 3000) // Poll every 3 seconds
+  }, [refetchRoomData, refetchMessages])
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+      console.log('[useRoom] Stopped polling')
+    }
+  }, [])
+
   const connectToRoom = useCallback(async () => {
     if (!userId || !roomId || channelRef.current) return
 
@@ -72,91 +123,67 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       console.error('[useRoom] Error initializing room:', error)
     }
 
-    // Set up Supabase real-time subscriptions
-    const channel = supabase.channel(`room-${roomId}`)
+    // Try to set up Supabase real-time subscription (with fallback to polling)
+    const channel = supabase.channel(`room-${roomId}`, {
+      config: {
+        broadcast: { self: false },
+        presence: { key: userId }
+      }
+    })
 
-    // Subscribe to room changes
+    // Simplified single subscription for all changes
     channel
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'rooms',
         filter: `id=eq.${roomId}`
-      }, async (payload) => {
-        console.log('[useRoom] Room updated:', payload)
-        // Refetch room data when room changes
-        try {
-          const response = await fetch(`/api/rooms/${roomId}`)
-          if (response.ok) {
-            const data = await response.json()
-            setRoom(data.room)
-
-            // Update user reference
-            const currentUser = data.room?.users?.find((u: User) => u.id === userId)
-            if (currentUser) {
-              setUser(currentUser)
-            }
-          }
-        } catch (error) {
-          console.error('[useRoom] Error refetching room:', error)
-        }
+      }, (payload) => {
+        console.log('[useRoom] Room data changed, refetching...')
+        refetchRoomData()
       })
-
-    // Subscribe to room_users changes
-    channel
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'room_users',
         filter: `room_id=eq.${roomId}`
-      }, async (payload) => {
-        console.log('[useRoom] Room users updated:', payload)
-        // Refetch room data when users change
-        try {
-          const response = await fetch(`/api/rooms/${roomId}`)
-          if (response.ok) {
-            const data = await response.json()
-            setRoom(data.room)
-
-            // Update user reference
-            const currentUser = data.room?.users?.find((u: User) => u.id === userId)
-            if (currentUser) {
-              setUser(currentUser)
-            }
-          }
-        } catch (error) {
-          console.error('[useRoom] Error refetching room:', error)
-        }
+      }, (payload) => {
+        console.log('[useRoom] Room users changed, refetching...')
+        refetchRoomData()
       })
-
-    // Subscribe to chat messages
-    channel
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`
-      }, async (payload) => {
-        console.log('[useRoom] New chat message:', payload)
-        // Refetch messages when new message arrives
-        try {
-          const response = await fetch(`/api/rooms/${roomId}/chat`)
-          if (response.ok) {
-            const data = await response.json()
-            setMessages(data.messages)
-          }
-        } catch (error) {
-          console.error('[useRoom] Error refetching messages:', error)
-        }
+      }, (payload) => {
+        console.log('[useRoom] New message, refetching...')
+        refetchMessages()
       })
+
+    // Subscribe with timeout handling
+    const subscribeTimeout = setTimeout(() => {
+      console.log('[useRoom] Real-time subscription timed out, falling back to polling')
+      setIsConnected(true) // Set connected even if real-time fails
+      startPolling()
+    }, 5000) // 5 second timeout
 
     channel.subscribe((status) => {
       console.log(`[useRoom] Subscription status for room ${roomId}:`, status)
-      setIsConnected(status === 'SUBSCRIBED')
+      if (status === 'SUBSCRIBED') {
+        clearTimeout(subscribeTimeout)
+        setIsConnected(true)
+        console.log('[useRoom] Real-time connection successful')
+      } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
+        clearTimeout(subscribeTimeout)
+        console.log('[useRoom] Real-time connection failed, falling back to polling')
+        setIsConnected(true) // Still set connected for polling fallback
+        startPolling()
+      }
     })
 
     channelRef.current = channel
-  }, [roomId, userId, userName, room?.name])
+  }, [roomId, userId, userName, room?.name, refetchRoomData, refetchMessages, startPolling])
 
   const joinRoom = useCallback(async (roomName?: string) => {
     if (!roomId || !userName) {
@@ -211,6 +238,10 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
   const leaveRoom = useCallback(async () => {
     try {
+      // Stop polling
+      stopPolling()
+
+      // Unsubscribe from real-time
       if (channelRef.current) {
         channelRef.current.unsubscribe()
         channelRef.current = null
@@ -231,7 +262,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     } catch (error) {
       console.error('Error leaving room:', error)
     }
-  }, [roomId, userId])
+  }, [roomId, userId, stopPolling])
 
   const updateVideo = useCallback(async (video: Video | null) => {
     if (!isHost || !roomId) {
@@ -307,11 +338,12 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      stopPolling()
       if (channelRef.current) {
         channelRef.current.unsubscribe()
       }
     }
-  }, [])
+  }, [stopPolling])
 
   return {
     room,
