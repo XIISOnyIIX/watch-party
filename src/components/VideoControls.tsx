@@ -24,6 +24,31 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
     }
   }
 
+  const getYouTubeThumbnail = async (videoId: string): Promise<string> => {
+    // Try different thumbnail qualities in order of preference
+    const thumbnailQualities = [
+      'maxresdefault.jpg',  // 1280x720
+      'hqdefault.jpg',      // 480x360
+      'mqdefault.jpg',      // 320x180
+      'default.jpg'         // 120x90 (always exists)
+    ]
+
+    for (const quality of thumbnailQualities) {
+      const url = `https://img.youtube.com/vi/${videoId}/${quality}`
+      try {
+        const response = await fetch(url, { method: 'HEAD' })
+        if (response.ok) {
+          return url
+        }
+      } catch (error) {
+        // Continue to next quality
+      }
+    }
+
+    // Fallback to default (always exists)
+    return `https://img.youtube.com/vi/${videoId}/default.jpg`
+  }
+
   const handleYouTubeAdd = async () => {
     if (!youtubeUrl || !isHost) return
 
@@ -34,12 +59,14 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
     }
 
     const title = await extractYouTubeTitle(videoId)
+    const thumbnail = await getYouTubeThumbnail(videoId)
+
     const video: Video = {
       id: videoId,
       title,
       type: 'youtube',
       url: youtubeUrl,
-      thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+      thumbnail
     }
 
     onVideoAdd(video)
