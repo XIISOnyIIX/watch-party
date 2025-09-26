@@ -158,6 +158,11 @@ export default function VideoPlayer({
     },
   }
 
+  // Debug logging
+  console.log('[VideoPlayer] Render - video:', video)
+  console.log('[VideoPlayer] Render - isPlaying:', isPlaying)
+  console.log('[VideoPlayer] Render - currentTime:', currentTime)
+
   if (!video) {
     return (
       <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
@@ -170,12 +175,15 @@ export default function VideoPlayer({
     )
   }
 
+  const youtubeVideoId = video.type === 'youtube' ? getYouTubeVideoId(video.url) : null
+  console.log('[VideoPlayer] YouTube video ID:', youtubeVideoId)
+
   return (
     <div className="aspect-video bg-black rounded-lg overflow-hidden relative" style={{ minHeight: '200px' }}>
       {video.type === 'youtube' ? (
         <div className="w-full h-full">
           <YouTube
-            videoId={getYouTubeVideoId(video.url) || ''}
+            videoId={youtubeVideoId || ''}
             opts={youtubeOpts}
             onReady={handleYouTubeReady}
             onStateChange={handleYouTubeStateChange}

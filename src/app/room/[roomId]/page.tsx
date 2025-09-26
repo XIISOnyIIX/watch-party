@@ -23,6 +23,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [showNameDialog, setShowNameDialog] = useState(true)
   const [tempName, setTempName] = useState('')
   const [roomId, setRoomId] = useState<string>('')
+  const [isLeaving, setIsLeaving] = useState(false)
 
   useEffect(() => {
     params.then(p => setRoomId(p.roomId))
@@ -71,10 +72,10 @@ export default function RoomPage({ params }: RoomPageProps) {
   }, [])
 
   useEffect(() => {
-    if (userName && !room && roomId) {
+    if (userName && !room && roomId && !isLeaving) {
       joinRoom(roomName || undefined)
     }
-  }, [userName, room, joinRoom, roomName, roomId])
+  }, [userName, room, joinRoom, roomName, roomId, isLeaving])
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -94,6 +95,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   }
 
   const handleLeaveRoom = async () => {
+    setIsLeaving(true)
     await leaveRoom()
     router.push('/')
   }
