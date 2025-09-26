@@ -200,7 +200,7 @@ export default function VideoControls({ onVideoAdd, isHost, className = '' }: Vi
             </button>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Supports MP4, WebM, OGG. Max 50MB.
+            Supports MP4, WebM, OGG. Max 2GB.
           </p>
         </div>
       </div>

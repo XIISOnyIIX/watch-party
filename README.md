@@ -8,7 +8,7 @@ A beautiful, real-time video streaming platform that allows you to watch YouTube
 
 ✨ **Real-time Synchronization** - Watch videos in perfect sync with friends
 🎥 **YouTube Integration** - Support for YouTube videos with automatic sync
-📁 **Local File Upload** - Upload and share your own video files (up to 50MB)
+📁 **Local File Upload** - Upload and share your own video files (up to 2GB)
 💬 **Live Chat** - Chat with other viewers in real-time
 👥 **Room Management** - Create private rooms and invite friends
 🎨 **Beautiful UI** - Modern, responsive design with dark theme
@@ -124,7 +124,7 @@ The app uses a serverless architecture perfect for Vercel:
 ## Limitations
 
 - Rooms are stored in memory and will reset on server restart
-- File uploads limited to 50MB
+- File uploads limited to 2GB
 - SSE connections timeout after 5 minutes of inactivity
 
 ## Contributing

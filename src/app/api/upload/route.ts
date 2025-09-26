@@ -24,11 +24,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check file size (50MB limit)
-    const maxSize = 50 * 1024 * 1024 // 50MB
+    // Check file size (2GB limit)
+    const maxSize = 2 * 1024 * 1024 * 1024 // 2GB
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: 'File too large. Maximum size is 50MB.' },
+        { error: 'File too large. Maximum size is 2GB.' },
         { status: 400 }
       )
     }
