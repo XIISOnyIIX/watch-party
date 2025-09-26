@@ -25,6 +25,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [roomId, setRoomId] = useState<string>('')
   const [isLeaving, setIsLeaving] = useState(false)
   const [error, setError] = useState<string>('')
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(false)
 
   useEffect(() => {
     params.then(p => setRoomId(p.roomId))
@@ -64,14 +65,21 @@ export default function RoomPage({ params }: RoomPageProps) {
     return () => clearTimeout(timeoutId)
   }, [room]) // Only run when room updates, NOT when messages update
 
-  // Handle room deletion (when host leaves)
+  // Track when room is successfully loaded
   useEffect(() => {
-    if (userName && roomId && room === null && !showNameDialog && !error && !isLeaving) {
+    if (room && !hasJoinedRoom) {
+      setHasJoinedRoom(true)
+    }
+  }, [room, hasJoinedRoom])
+
+  // Handle room deletion (when host leaves) - only after successfully joining
+  useEffect(() => {
+    if (hasJoinedRoom && userName && roomId && room === null && !showNameDialog && !error && !isLeaving) {
       // Room was deleted (likely host left), redirect to home
       console.log('[RoomPage] Room deleted, redirecting to home')
       router.push('/')
     }
-  }, [room, userName, roomId, showNameDialog, error, isLeaving, router])
+  }, [room, userName, roomId, showNameDialog, error, isLeaving, router, hasJoinedRoom])
 
   useEffect(() => {
     const savedName = localStorage.getItem('userName')
