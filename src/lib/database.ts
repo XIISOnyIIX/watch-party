@@ -189,6 +189,7 @@ export class DatabaseService {
         ? {
             current_video_id: video.id,
             current_video_title: video.title,
+            current_video_type: video.type,
             current_video_url: video.url,
             current_video_thumbnail: video.thumbnail,
             current_position: 0,
@@ -197,6 +198,7 @@ export class DatabaseService {
         : {
             current_video_id: null,
             current_video_title: null,
+            current_video_type: null,
             current_video_url: null,
             current_video_thumbnail: null,
             current_position: 0,
