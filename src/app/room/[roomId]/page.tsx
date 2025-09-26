@@ -24,6 +24,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [tempName, setTempName] = useState('')
   const [roomId, setRoomId] = useState<string>('')
   const [isLeaving, setIsLeaving] = useState(false)
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
     params.then(p => setRoomId(p.roomId))
@@ -63,6 +64,15 @@ export default function RoomPage({ params }: RoomPageProps) {
     return () => clearTimeout(timeoutId)
   }, [room]) // Only run when room updates, NOT when messages update
 
+  // Handle room deletion (when host leaves)
+  useEffect(() => {
+    if (userName && roomId && room === null && !showNameDialog && !error && !isLeaving) {
+      // Room was deleted (likely host left), redirect to home
+      console.log('[RoomPage] Room deleted, redirecting to home')
+      router.push('/')
+    }
+  }, [room, userName, roomId, showNameDialog, error, isLeaving, router])
+
   useEffect(() => {
     const savedName = localStorage.getItem('userName')
     if (savedName) {
@@ -73,7 +83,9 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   useEffect(() => {
     if (userName && !room && roomId && !isLeaving) {
-      joinRoom(roomName || undefined)
+      joinRoom(roomName || undefined).catch((error) => {
+        setError(error.message || 'Failed to join room')
+      })
     }
   }, [userName, room, joinRoom, roomName, roomId, isLeaving])
 
@@ -81,8 +93,21 @@ export default function RoomPage({ params }: RoomPageProps) {
     e.preventDefault()
     if (!tempName.trim()) return
 
-    setUserName(tempName.trim())
-    localStorage.setItem('userName', tempName.trim())
+    const trimmedName = tempName.trim()
+
+    // Validate name length for mobile users
+    if (trimmedName.length < 2) {
+      alert('Name must be at least 2 characters long')
+      return
+    }
+
+    if (trimmedName.length > 20) {
+      alert('Name must be 20 characters or less')
+      return
+    }
+
+    setUserName(trimmedName)
+    localStorage.setItem('userName', trimmedName)
     setShowNameDialog(false)
   }
 
@@ -134,6 +159,26 @@ export default function RoomPage({ params }: RoomPageProps) {
               Join Room
             </button>
           </form>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+        <div className="bg-red-900/50 backdrop-blur-md rounded-2xl p-8 border border-red-500/20 max-w-md w-full text-center">
+          <h2 className="text-2xl font-semibold text-white mb-4">Connection Error</h2>
+          <p className="text-red-200 mb-6">{error}</p>
+          <button
+            onClick={() => {
+              setError('')
+              setShowNameDialog(true)
+            }}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     )

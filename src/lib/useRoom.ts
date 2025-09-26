@@ -53,6 +53,17 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         if (currentUser) {
           setUser(currentUser)
         }
+      } else if (response.status === 404) {
+        // Room was deleted (host left), clear local state
+        console.log('[useRoom] Room was deleted, clearing state')
+        setRoom(null)
+        setUser(null)
+        setIsConnected(false)
+        // Stop polling will be handled by the cleanup effect
+        if (channelRef.current) {
+          channelRef.current.unsubscribe()
+          channelRef.current = null
+        }
       }
     } catch (error) {
       console.error('[useRoom] Error refetching room:', error)
@@ -229,7 +240,17 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       } else {
         const errorData = await response.text()
         console.error(`[useRoom] Failed to ${action} room ${roomId}:`, response.status, errorData)
-        throw new Error(`Failed to ${action} room: ${response.status}`)
+
+        // Better error handling for mobile users
+        if (response.status === 409) {
+          throw new Error('You are already in this room. Please refresh the page.')
+        } else if (response.status >= 500) {
+          throw new Error('Server error. Please try again in a moment.')
+        } else if (response.status === 404) {
+          throw new Error('Room not found. Please check the room link.')
+        } else {
+          throw new Error(`Failed to ${action} room. Please try again.`)
+        }
       }
     } catch (error) {
       console.error(`[useRoom] Error ${roomName ? 'creating' : 'joining'} room:`, error)

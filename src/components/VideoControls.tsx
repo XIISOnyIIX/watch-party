@@ -60,6 +60,14 @@ export default function VideoControls({ onVideoAdd, onVideoClear, currentVideo, 
       return
     }
 
+    // Auto-clear current video if it's a different type
+    if (currentVideo && currentVideo.type === 'local') {
+      console.log('[VideoControls] Auto-clearing local video to add YouTube video')
+      onVideoClear()
+      // Small delay to ensure cleanup completes
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+
     const title = await extractYouTubeTitle(videoId)
     const thumbnail = await getYouTubeThumbnail(videoId)
 
@@ -87,6 +95,14 @@ export default function VideoControls({ onVideoAdd, onVideoClear, currentVideo, 
 
     console.log('[VideoControls] Starting file upload:', file.name)
     setIsUploading(true)
+
+    // Auto-clear current video if it's a different type
+    if (currentVideo && currentVideo.type === 'youtube') {
+      console.log('[VideoControls] Auto-clearing YouTube video to add local video')
+      onVideoClear()
+      // Small delay to ensure cleanup completes
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
 
     try {
       const formData = new FormData()

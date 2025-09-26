@@ -149,7 +149,45 @@ export class DatabaseService {
     try {
       console.log(`[DatabaseService] User ${userId} leaving room ${roomId}`)
 
-      // Remove user from room
+      // Check if the leaving user is the host
+      const { data: leavingUser, error: userCheckError } = await this.getClient()
+        .from('room_users')
+        .select('is_host')
+        .eq('room_id', roomId)
+        .eq('user_id', userId)
+        .single()
+
+      if (userCheckError) {
+        console.error('[DatabaseService] Error checking user role:', userCheckError)
+        return null
+      }
+
+      const isLeavingHost = leavingUser?.is_host || false
+
+      // If host is leaving, close the entire room
+      if (isLeavingHost) {
+        console.log(`[DatabaseService] Host leaving room ${roomId}, closing room for all users`)
+
+        // Get room data to clean up video files before deletion
+        const roomToDelete = await this.getRoom(roomId)
+        if (roomToDelete?.currentVideo?.url && roomToDelete.currentVideo.type === 'local') {
+          await this.cleanupBlobFile(roomToDelete.currentVideo.url)
+        }
+
+        // Delete all users from room (cascade delete will handle messages)
+        await this.getClient()
+          .from('room_users')
+          .delete()
+          .eq('room_id', roomId)
+
+        // Delete the room
+        await this.getClient().from('rooms').delete().eq('id', roomId)
+
+        console.log(`[DatabaseService] Room ${roomId} closed because host left`)
+        return null
+      }
+
+      // Remove user from room (non-host leaving)
       const { error: deleteError } = await this.getClient()
         .from('room_users')
         .delete()
@@ -185,7 +223,7 @@ export class DatabaseService {
         await this.getClient().from('rooms').delete().eq('id', roomId)
         return null
       } else {
-        // If the host left, make the first remaining user the host
+        // If no host is left (shouldn't happen now), make the first remaining user the host
         const hasHost = remainingUsers.some(u => u.is_host)
         if (!hasHost) {
           console.log(`[DatabaseService] Making ${remainingUsers[0].user_name} the new host of room ${roomId}`)
