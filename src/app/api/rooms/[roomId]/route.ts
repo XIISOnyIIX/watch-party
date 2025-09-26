@@ -30,7 +30,24 @@ export async function POST(
 ) {
   try {
     const resolvedParams = await params
-    const body = await request.json()
+
+    // Handle different request types (JSON vs form data from sendBeacon)
+    let body
+    const contentType = request.headers.get('content-type')
+
+    if (contentType && contentType.includes('application/json')) {
+      body = await request.json()
+    } else {
+      // Handle sendBeacon requests (might be different format)
+      const text = await request.text()
+      try {
+        body = JSON.parse(text)
+      } catch {
+        // If not JSON, try to parse as basic data
+        body = { action: 'leave', user: { id: 'unknown' } }
+      }
+    }
+
     const { action, user, video, isPlaying, currentTime, roomName, targetUserId } = body
     console.log(`[Room API POST] Action: ${action} for room ${resolvedParams.roomId}`, { userId: user?.id, userName: user?.name })
 

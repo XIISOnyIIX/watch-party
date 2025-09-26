@@ -450,13 +450,25 @@ export class DatabaseService {
         return null
       }
 
-      // Check if target is the same as requester (can't demote yourself)
-      if (requesterId === targetUserId) {
-        console.error('[DatabaseService] Cannot demote yourself')
+      // Check how many hosts are in the room
+      const { data: allHosts, error: hostsError } = await this.getClient()
+        .from('room_users')
+        .select('user_id')
+        .eq('room_id', roomId)
+        .eq('is_host', true)
+
+      if (hostsError) {
+        console.error('[DatabaseService] Error checking host count:', hostsError)
         return null
       }
 
-      // Demote target user from host
+      // Don't allow demoting the last host
+      if (allHosts.length <= 1) {
+        console.error('[DatabaseService] Cannot demote the last host in the room')
+        return null
+      }
+
+      // Allow demoting anyone, including yourself, as long as there's another host
       const { error: demoteError } = await this.getClient()
         .from('room_users')
         .update({ is_host: false })

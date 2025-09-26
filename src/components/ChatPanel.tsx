@@ -98,13 +98,13 @@ export default function ChatPanel({
               </div>
 
               {/* Host promotion/demotion buttons */}
-              {currentUser?.isHost && user.id !== currentUser.id && (
+              {currentUser?.isHost && (
                 <div className="flex gap-1">
                   {user.isHost ? (
                     <button
                       onClick={() => onDemoteUser?.(user.id)}
                       className="px-2 py-1 text-xs bg-red-600/70 text-red-200 rounded hover:bg-red-600 transition-colors"
-                      title="Remove host privileges"
+                      title={user.id === currentUser.id ? "Remove your host privileges" : "Remove host privileges"}
                     >
                       ⬇️
                     </button>

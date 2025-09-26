@@ -95,7 +95,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     pollingIntervalRef.current = setInterval(() => {
       refetchRoomData()
       refetchMessages()
-    }, 3000) // Poll every 3 seconds
+    }, 2000) // Poll every 2 seconds for better user list updates
   }, [refetchRoomData, refetchMessages])
 
   const stopPolling = useCallback(() => {
@@ -161,8 +161,11 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         table: 'room_users',
         filter: `room_id=eq.${roomId}`
       }, (payload) => {
-        console.log('[useRoom] Room users changed, refetching...')
-        refetchRoomData()
+        console.log('[useRoom] Room users changed:', payload.eventType, payload.old, payload.new)
+        // Force immediate refetch for user changes
+        setTimeout(() => {
+          refetchRoomData()
+        }, 100)
       })
       .on('postgres_changes', {
         event: 'INSERT',

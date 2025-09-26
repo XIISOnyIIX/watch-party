@@ -28,6 +28,7 @@ export default function VideoPlayer({
   const [duration, setDuration] = useState(0)
   const [isBuffering, setIsBuffering] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [isScrolling, setIsScrolling] = useState(false)
 
   const syncTimeRef = useRef<number>(0)
   const lastSyncTimeRef = useRef<number>(0)
@@ -39,6 +40,26 @@ export default function VideoPlayer({
              window.innerWidth < 768
     }
     setIsMobile(checkMobile())
+  }, [])
+
+  // Handle scroll events to reduce sync during scrolling on all devices
+  useEffect(() => {
+    let scrollTimeout: NodeJS.Timeout
+
+    const handleScroll = () => {
+      setIsScrolling(true)
+      clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        setIsScrolling(false)
+      }, 200) // Stop considering as scrolling after 200ms
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      clearTimeout(scrollTimeout)
+    }
   }, [])
 
   const getYouTubeVideoId = (url: string) => {
@@ -144,12 +165,12 @@ export default function VideoPlayer({
       // Mobile-specific sync threshold - more tolerant
       const syncThreshold = isMobile ? 4 : 2 // 4s for mobile, 2s for desktop
 
-      // Check if video is buffering/loading
-      const isBuffering = video_element.readyState < 3 // HAVE_FUTURE_DATA
-      setIsBuffering(isBuffering)
+      // Less aggressive buffering detection - only when really needed
+      const isActuallyBuffering = video_element.readyState < 2 // HAVE_CURRENT_DATA
+      setIsBuffering(isActuallyBuffering)
 
-      // Don't sync if buffering on mobile
-      if (isMobile && isBuffering) {
+      // Don't sync if actively seeking, buffering, or scrolling
+      if (video_element.seeking || (isMobile && isActuallyBuffering) || isScrolling) {
         return
       }
 
@@ -171,7 +192,7 @@ export default function VideoPlayer({
 
       lastSyncTimeRef.current = now
     }
-  }, [video, isPlaying, currentTime, isReady, isMobile])
+  }, [video, isPlaying, currentTime, isReady, isMobile, isScrolling])
 
   // Sync video state when receiving updates from other users
   useEffect(() => {
@@ -253,11 +274,15 @@ export default function VideoPlayer({
           // Mobile-specific attributes
           playsInline={true}
           preload={isMobile ? "metadata" : "auto"}
-          // Prevent mobile video taking over screen
+          // Prevent mobile video taking over screen and improve scroll performance
           style={{
             objectFit: 'contain',
             maxWidth: '100%',
-            maxHeight: '100%'
+            maxHeight: '100%',
+            // Improve scroll performance on mobile
+            willChange: isMobile ? 'auto' : 'transform',
+            backfaceVisibility: 'hidden',
+            perspective: 1000
           }}
         />
       )}
