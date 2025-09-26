@@ -26,9 +26,20 @@ export default function VideoPlayer({
   const [isReady, setIsReady] = useState(false)
   const [localCurrentTime, setLocalCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [isBuffering, setIsBuffering] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   const syncTimeRef = useRef<number>(0)
   const lastSyncTimeRef = useRef<number>(0)
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+             window.innerWidth < 768
+    }
+    setIsMobile(checkMobile())
+  }, [])
 
   const getYouTubeVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
@@ -98,13 +109,19 @@ export default function VideoPlayer({
 
   const syncVideo = useCallback(() => {
     const now = Date.now()
-    if (now - lastSyncTimeRef.current < 1000) return // Limit sync frequency
+
+    // Mobile-specific sync frequency - less aggressive
+    const syncFrequency = isMobile ? 2000 : 1000 // 2s for mobile, 1s for desktop
+    if (now - lastSyncTimeRef.current < syncFrequency) return
 
     if (video?.type === 'youtube' && youtubeRef.current && isReady) {
       const ytCurrentTime = youtubeRef.current.getCurrentTime()
       const timeDiff = Math.abs(ytCurrentTime - currentTime)
 
-      if (timeDiff > 2) { // Sync if difference > 2 seconds
+      // Mobile-specific sync threshold - more tolerant
+      const syncThreshold = isMobile ? 3 : 2 // 3s for mobile, 2s for desktop
+
+      if (timeDiff > syncThreshold) {
         youtubeRef.current.seekTo(currentTime, true)
       }
 
@@ -120,22 +137,41 @@ export default function VideoPlayer({
 
       lastSyncTimeRef.current = now
     } else if (video?.type === 'local' && videoRef.current) {
-      const localCurrentTime = videoRef.current.currentTime
+      const video_element = videoRef.current
+      const localCurrentTime = video_element.currentTime
       const timeDiff = Math.abs(localCurrentTime - currentTime)
 
-      if (timeDiff > 2) { // Sync if difference > 2 seconds
-        videoRef.current.currentTime = currentTime
+      // Mobile-specific sync threshold - more tolerant
+      const syncThreshold = isMobile ? 4 : 2 // 4s for mobile, 2s for desktop
+
+      // Check if video is buffering/loading
+      const isBuffering = video_element.readyState < 3 // HAVE_FUTURE_DATA
+      setIsBuffering(isBuffering)
+
+      // Don't sync if buffering on mobile
+      if (isMobile && isBuffering) {
+        return
       }
 
-      if (isPlaying && videoRef.current.paused) {
-        videoRef.current.play()
-      } else if (!isPlaying && !videoRef.current.paused) {
-        videoRef.current.pause()
+      if (timeDiff > syncThreshold) {
+        video_element.currentTime = currentTime
+      }
+
+      // More careful play/pause handling for mobile
+      if (isPlaying && video_element.paused) {
+        const playPromise = video_element.play()
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log('[VideoPlayer] Play failed:', error)
+          })
+        }
+      } else if (!isPlaying && !video_element.paused) {
+        video_element.pause()
       }
 
       lastSyncTimeRef.current = now
     }
-  }, [video, isPlaying, currentTime, isReady])
+  }, [video, isPlaying, currentTime, isReady, isMobile])
 
   // Sync video state when receiving updates from other users
   useEffect(() => {
@@ -198,6 +234,31 @@ export default function VideoPlayer({
             setIsReady(true)
             onReady?.()
           }}
+          onWaiting={() => setIsBuffering(true)}
+          onCanPlay={() => setIsBuffering(false)}
+          onLoadStart={() => setIsBuffering(true)}
+          onLoadedData={() => setIsBuffering(false)}
+          onError={(e) => {
+            console.error('[VideoPlayer] Video error:', e)
+            setIsBuffering(false)
+          }}
+          onStalled={() => {
+            console.log('[VideoPlayer] Video stalled')
+            setIsBuffering(true)
+          }}
+          onSuspend={() => {
+            console.log('[VideoPlayer] Video suspended')
+            setIsBuffering(false)
+          }}
+          // Mobile-specific attributes
+          playsInline={true}
+          preload={isMobile ? "metadata" : "auto"}
+          // Prevent mobile video taking over screen
+          style={{
+            objectFit: 'contain',
+            maxWidth: '100%',
+            maxHeight: '100%'
+          }}
         />
       )}
 
@@ -205,8 +266,18 @@ export default function VideoPlayer({
         <div className="absolute inset-0 bg-transparent pointer-events-none" />
       )}
 
+      {/* Buffering indicator */}
+      {isBuffering && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <div className="bg-black/70 rounded-lg px-4 py-2 flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+            <span className="text-white text-sm">Buffering...</span>
+          </div>
+        </div>
+      )}
+
       <div className="absolute bottom-4 right-4 bg-black/50 text-white px-3 py-1 rounded text-sm">
-        {isHost ? 'Host' : 'Viewer'}
+        {isHost ? 'Host' : 'Viewer'} {isMobile && '📱'}
       </div>
     </div>
   )
