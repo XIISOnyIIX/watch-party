@@ -2,13 +2,19 @@ import { supabaseAdmin } from './supabase'
 import { Room, User, Video, ChatMessage } from '@/types'
 
 export class DatabaseService {
+  private getClient() {
+    if (!supabaseAdmin) {
+      throw new Error('Supabase admin client not available - missing SUPABASE_SERVICE_ROLE_KEY')
+    }
+    return supabaseAdmin
+  }
   // Room operations
   async createRoom(roomId: string, roomName: string, hostUser: User): Promise<Room | null> {
     try {
       console.log(`[DatabaseService] Creating room ${roomId} with host ${hostUser.name}`)
 
       // Insert room
-      const { data: roomData, error: roomError } = await supabaseAdmin
+      const { data: roomData, error: roomError } = await this.getClient()
         .from('rooms')
         .insert({
           id: roomId,
@@ -25,7 +31,7 @@ export class DatabaseService {
       }
 
       // Insert host user
-      const { error: userError } = await supabaseAdmin
+      const { error: userError } = await this.getClient()
         .from('room_users')
         .insert({
           room_id: roomId,
@@ -37,7 +43,7 @@ export class DatabaseService {
       if (userError) {
         console.error('[DatabaseService] Error adding host user:', userError)
         // Try to clean up the room
-        await supabaseAdmin.from('rooms').delete().eq('id', roomId)
+        await this.getClient().from('rooms').delete().eq('id', roomId)
         return null
       }
 
@@ -50,7 +56,7 @@ export class DatabaseService {
 
   async getRoom(roomId: string): Promise<Room | null> {
     try {
-      const { data: roomData, error: roomError } = await supabaseAdmin
+      const { data: roomData, error: roomError } = await this.getClient()
         .from('rooms')
         .select('*')
         .eq('id', roomId)
@@ -60,7 +66,7 @@ export class DatabaseService {
         return null
       }
 
-      const { data: usersData, error: usersError } = await supabaseAdmin
+      const { data: usersData, error: usersError } = await this.getClient()
         .from('room_users')
         .select('*')
         .eq('room_id', roomId)
@@ -95,7 +101,7 @@ export class DatabaseService {
       }
 
       // Upsert user (handles reconnections)
-      const { error: userError } = await supabaseAdmin
+      const { error: userError } = await this.getClient()
         .from('room_users')
         .upsert({
           room_id: roomId,
@@ -112,7 +118,7 @@ export class DatabaseService {
       }
 
       // Update room activity
-      await supabaseAdmin
+      await this.getClient()
         .from('rooms')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', roomId)
@@ -129,7 +135,7 @@ export class DatabaseService {
       console.log(`[DatabaseService] User ${userId} leaving room ${roomId}`)
 
       // Remove user from room
-      const { error: deleteError } = await supabaseAdmin
+      const { error: deleteError } = await this.getClient()
         .from('room_users')
         .delete()
         .eq('room_id', roomId)
@@ -141,7 +147,7 @@ export class DatabaseService {
       }
 
       // Check if any users are left
-      const { data: remainingUsers, error: usersError } = await supabaseAdmin
+      const { data: remainingUsers, error: usersError } = await this.getClient()
         .from('room_users')
         .select('*')
         .eq('room_id', roomId)
@@ -154,14 +160,14 @@ export class DatabaseService {
       if (remainingUsers.length === 0) {
         // No users left, delete the room
         console.log(`[DatabaseService] Room ${roomId} is now empty, deleting`)
-        await supabaseAdmin.from('rooms').delete().eq('id', roomId)
+        await this.getClient().from('rooms').delete().eq('id', roomId)
         return null
       } else {
         // If the host left, make the first remaining user the host
         const hasHost = remainingUsers.some(u => u.is_host)
         if (!hasHost) {
           console.log(`[DatabaseService] Making ${remainingUsers[0].user_name} the new host of room ${roomId}`)
-          await supabaseAdmin
+          await this.getClient()
             .from('room_users')
             .update({ is_host: true })
             .eq('id', remainingUsers[0].id)
@@ -197,7 +203,7 @@ export class DatabaseService {
             is_playing: false
           }
 
-      const { error } = await supabaseAdmin
+      const { error } = await this.getClient()
         .from('rooms')
         .update(updateData)
         .eq('id', roomId)
@@ -216,7 +222,7 @@ export class DatabaseService {
 
   async updateVideoState(roomId: string, isPlaying: boolean, currentTime: number): Promise<Room | null> {
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await this.getClient()
         .from('rooms')
         .update({
           is_playing: isPlaying,
@@ -239,7 +245,7 @@ export class DatabaseService {
   // Chat operations
   async addMessage(roomId: string, message: ChatMessage): Promise<void> {
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await this.getClient()
         .from('chat_messages')
         .insert({
           room_id: roomId,
@@ -258,7 +264,7 @@ export class DatabaseService {
 
   async getMessages(roomId: string, limit: number = 100): Promise<ChatMessage[]> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await this.getClient()
         .from('chat_messages')
         .select('*')
         .eq('room_id', roomId)
@@ -285,7 +291,7 @@ export class DatabaseService {
 
   async getAllRooms(): Promise<Room[]> {
     try {
-      const { data: roomsData, error: roomsError } = await supabaseAdmin
+      const { data: roomsData, error: roomsError } = await this.getClient()
         .from('rooms')
         .select('*')
 
@@ -296,7 +302,7 @@ export class DatabaseService {
 
       const rooms: Room[] = []
       for (const roomData of roomsData) {
-        const { data: usersData, error: usersError } = await supabaseAdmin
+        const { data: usersData, error: usersError } = await this.getClient()
           .from('room_users')
           .select('*')
           .eq('room_id', roomData.id)
