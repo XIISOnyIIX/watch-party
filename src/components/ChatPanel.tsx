@@ -109,16 +109,15 @@ export default function ChatPanel({
               {/* Host promotion/demotion buttons with proper hierarchy */}
               {currentUser?.isHost && (() => {
                 const isRoomCreator = user.id === roomCreatorId
-                const isCurrentUserCreator = currentUser.id === roomCreatorId
                 const isSelfAction = user.id === currentUser.id
 
-                // Don't show any buttons for room creator unless they're managing themselves
-                if (isRoomCreator && !isSelfAction) {
+                // Never show buttons for yourself
+                if (isSelfAction) {
                   return null
                 }
 
-                // Don't show demote button for yourself unless you're the room creator
-                if (isSelfAction && !isCurrentUserCreator) {
+                // Never show buttons for room creator (they can't be demoted)
+                if (isRoomCreator) {
                   return null
                 }
 
