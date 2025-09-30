@@ -26,6 +26,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [isLeaving, setIsLeaving] = useState(false)
   const [error, setError] = useState<string>('')
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false)
+  const [isJoining, setIsJoining] = useState(true)
 
   useEffect(() => {
     params.then(p => setRoomId(p.roomId))
@@ -71,8 +72,16 @@ export default function RoomPage({ params }: RoomPageProps) {
   useEffect(() => {
     if (room && !hasJoinedRoom) {
       setHasJoinedRoom(true)
+      setIsJoining(false)
     }
   }, [room, hasJoinedRoom])
+
+  // Set isJoining to false after connection established
+  useEffect(() => {
+    if (isConnected && room) {
+      setIsJoining(false)
+    }
+  }, [isConnected, room])
 
   // Handle room deletion (when host leaves) - only after successfully joining
   useEffect(() => {
@@ -244,15 +253,14 @@ export default function RoomPage({ params }: RoomPageProps) {
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold text-white">{room.name}</h1>
               <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                <div className={`w-3 h-3 rounded-full ${
+                  isJoining ? 'bg-blue-500 animate-pulse' :
+                  isConnected ? 'bg-green-500 animate-pulse' :
+                  'bg-yellow-500 animate-pulse'
+                }`}></div>
                 <span className="text-sm text-gray-300">
-                  {isConnected ? 'Connected' : 'Reconnecting...'}
+                  {isJoining ? 'Joining...' : isConnected ? 'Connected' : 'Reconnecting...'}
                 </span>
-                {!isConnected && (
-                  <div className="text-xs text-yellow-400">
-                    Check console for details
-                  </div>
-                )}
               </div>
             </div>
 

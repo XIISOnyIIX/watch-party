@@ -240,30 +240,36 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
 
       {/* Search Results Grid */}
       {searchResults.length > 0 && !selectedItem && (
-        <div
-          className="max-h-96 overflow-y-auto pr-2"
-          style={{
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#4B5563 #1F2937'
-          }}
-        >
+        <div className="relative">
           <style jsx>{`
-            div::-webkit-scrollbar {
-              width: 8px;
+            .movie-scroll::-webkit-scrollbar {
+              width: 10px;
             }
-            div::-webkit-scrollbar-track {
-              background: #1F2937;
-              border-radius: 4px;
+            .movie-scroll::-webkit-scrollbar-track {
+              background: linear-gradient(to bottom, #1a1a2e, #16213e);
+              border-radius: 10px;
+              margin: 4px 0;
             }
-            div::-webkit-scrollbar-thumb {
-              background: #4B5563;
-              border-radius: 4px;
+            .movie-scroll::-webkit-scrollbar-thumb {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              border-radius: 10px;
+              border: 2px solid transparent;
+              background-clip: padding-box;
             }
-            div::-webkit-scrollbar-thumb:hover {
-              background: #6B7280;
+            .movie-scroll::-webkit-scrollbar-thumb:hover {
+              background: linear-gradient(135deg, #764ba2 0%, #f093fb 100%);
+              border: 2px solid transparent;
+              background-clip: padding-box;
             }
           `}</style>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div
+            className="movie-scroll max-h-96 overflow-y-auto overflow-x-hidden pr-3"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#667eea #1a1a2e'
+            }}
+          >
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pb-2">
             {filteredResults.map((item) => (
               <div
                 key={`${item.media_type}-${item.id}`}
@@ -314,6 +320,7 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
                 </div>
               </div>
             ))}
+            </div>
           </div>
         </div>
       )}
