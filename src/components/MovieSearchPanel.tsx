@@ -69,10 +69,10 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
     const isMovie = itemToPlay.media_type === 'movie'
     const tmdbId = itemToPlay.id.toString()
 
-    // Construct embed URL using vidsrc.pro (reliable free embed provider)
+    // Construct embed URL using moviesapi.club
     const embedUrl = isMovie
-      ? `https://vidsrc.pro/embed/movie/${tmdbId}`
-      : `https://vidsrc.pro/embed/tv/${tmdbId}/${selectedSeason}/${selectedEpisode}`
+      ? `https://moviesapi.club/movie/${tmdbId}`
+      : `https://moviesapi.club/tv/${tmdbId}-${selectedSeason}-${selectedEpisode}`
 
     const video: Video = {
       id: `${itemToPlay.media_type}-${tmdbId}${isMovie ? '' : `-${selectedSeason}-${selectedEpisode}`}`,
