@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Video } from '@/types'
+import MovieSearchPanel from './MovieSearchPanel'
 
 interface VideoControlsProps {
   onVideoAdd: (video: Video) => void
@@ -11,9 +12,12 @@ interface VideoControlsProps {
   className?: string
 }
 
+type TabType = 'youtube' | 'upload' | 'movies'
+
 export default function VideoControls({ onVideoAdd, onVideoClear, currentVideo, isHost, className = '' }: VideoControlsProps) {
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabType>('youtube')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const extractYouTubeTitle = async (videoId: string): Promise<string> => {
@@ -154,73 +158,110 @@ export default function VideoControls({ onVideoAdd, onVideoClear, currentVideo, 
     <div className={`bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 ${className}`}>
       <h3 className="text-lg font-semibold text-white mb-4">Add Video</h3>
 
+      {/* Tab Navigation */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setActiveTab('youtube')}
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+            activeTab === 'youtube'
+              ? 'bg-red-600 text-white shadow-lg'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          YouTube
+        </button>
+        <button
+          onClick={() => setActiveTab('upload')}
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+            activeTab === 'upload'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Upload
+        </button>
+        <button
+          onClick={() => setActiveTab('movies')}
+          className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+            activeTab === 'movies'
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Movies/TV
+        </button>
+      </div>
+
       <div className="space-y-4">
-        {/* YouTube URL Input */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            YouTube URL
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
-              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-            />
-            <button
-              onClick={handleYouTubeAdd}
-              disabled={!youtubeUrl}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              <span>🎥</span>
-              Add
-            </button>
+        {/* YouTube Tab */}
+        {activeTab === 'youtube' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              YouTube URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+              <button
+                onClick={handleYouTubeAdd}
+                disabled={!youtubeUrl}
+                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                <span>🎥</span>
+                Add
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="flex items-center">
-          <div className="flex-1 h-px bg-gray-600"></div>
-          <span className="px-3 text-gray-400 text-sm">or</span>
-          <div className="flex-1 h-px bg-gray-600"></div>
-        </div>
-
-        {/* File Upload */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Upload Video File
-          </label>
-          <div className="relative">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/mp4,video/webm,video/ogg,video/quicktime"
-              onChange={handleFileUpload}
-              disabled={isUploading}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="w-full px-4 py-3 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 font-medium"
-            >
-              {isUploading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <span>📁</span>
-                  Choose Video File
-                </>
-              )}
-            </button>
+        {/* Upload Tab */}
+        {activeTab === 'upload' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Upload Video File
+            </label>
+            <div className="relative">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="w-full px-4 py-3 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 font-medium"
+              >
+                {isUploading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <span>📁</span>
+                    Choose Video File
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Supports MP4, WebM, OGG. Max 2GB.
+            </p>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Supports MP4, WebM, OGG. Max 2GB.
-          </p>
-        </div>
+        )}
+
+        {/* Movies/TV Tab */}
+        {activeTab === 'movies' && (
+          <MovieSearchPanel onVideoSelect={onVideoAdd} isHost={isHost} />
+        )}
 
         {/* Clear Video Button */}
         {currentVideo && (

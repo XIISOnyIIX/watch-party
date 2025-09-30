@@ -12,10 +12,16 @@ export interface Room {
 export interface Video {
   id: string;
   title: string;
-  type: 'youtube' | 'local';
+  type: 'youtube' | 'local' | 'movie' | 'tv';
   url: string;
   duration?: number;
   thumbnail?: string;
+  // Movie/TV specific fields
+  tmdbId?: string;
+  imdbId?: string;
+  season?: number;
+  episode?: number;
+  year?: number;
 }
 
 export interface User {

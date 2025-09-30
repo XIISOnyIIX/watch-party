@@ -301,7 +301,9 @@ export default function RoomPage({ params }: RoomPageProps) {
                   ) : (
                     <div className="w-20 h-15 bg-gray-700 rounded-lg flex items-center justify-center">
                       <span className="text-2xl">
-                        {room.currentVideo.type === 'youtube' ? '🎥' : '📁'}
+                        {room.currentVideo.type === 'youtube' ? '🎥' :
+                         room.currentVideo.type === 'movie' ? '🎬' :
+                         room.currentVideo.type === 'tv' ? '📺' : '📁'}
                       </span>
                     </div>
                   )}
@@ -313,6 +315,10 @@ export default function RoomPage({ params }: RoomPageProps) {
                       <span className="flex items-center gap-1">
                         {room.currentVideo.type === 'youtube' ? (
                           <>🎥 YouTube</>
+                        ) : room.currentVideo.type === 'movie' ? (
+                          <>🎬 Movie</>
+                        ) : room.currentVideo.type === 'tv' ? (
+                          <>📺 TV Show</>
                         ) : (
                           <>📁 Local File</>
                         )}

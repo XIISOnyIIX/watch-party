@@ -292,7 +292,7 @@ export default function VideoPlayer({
         <div className="text-center text-gray-400">
           <div className="text-6xl mb-4">🎬</div>
           <p className="text-xl">No video selected</p>
-          <p className="text-sm mt-2">Add a YouTube URL or upload a local file to get started</p>
+          <p className="text-sm mt-2">Add a YouTube URL, upload a local file, or search for movies/TV shows to get started</p>
         </div>
       </div>
     )
@@ -312,6 +312,21 @@ export default function VideoPlayer({
             className="w-full h-full"
             style={{ pointerEvents: isHost ? 'auto' : 'none' }}
           />
+        </div>
+      ) : video.type === 'movie' || video.type === 'tv' ? (
+        <div className="w-full h-full relative">
+          <iframe
+            src={video.url}
+            className="w-full h-full border-0"
+            allowFullScreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            referrerPolicy="origin"
+            style={{ pointerEvents: isHost ? 'auto' : 'none' }}
+          />
+          {/* Overlay for non-host users to prevent interaction */}
+          {!isHost && (
+            <div className="absolute inset-0 bg-transparent pointer-events-auto cursor-not-allowed" />
+          )}
         </div>
       ) : (
         <video
