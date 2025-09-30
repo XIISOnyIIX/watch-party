@@ -13,7 +13,7 @@ export interface Video {
   id: string;
   title: string;
   type: 'youtube' | 'local' | 'movie' | 'tv';
-  url: string; // Direct stream URL if extraction succeeds, otherwise embed URL
+  url: string;
   duration?: number;
   thumbnail?: string;
   // Movie/TV specific fields
@@ -22,8 +22,6 @@ export interface Video {
   season?: number;
   episode?: number;
   year?: number;
-  embedUrl?: string; // Fallback embed URL
-  isStreaming?: boolean; // True if using direct stream (synced), false if using embed (not synced)
 }
 
 export interface User {

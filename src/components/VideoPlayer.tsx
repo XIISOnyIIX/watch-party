@@ -314,66 +314,20 @@ export default function VideoPlayer({
           />
         </div>
       ) : video.type === 'movie' || video.type === 'tv' ? (
-        video.isStreaming ? (
-          // Direct stream - USE VIDEO ELEMENT (SYNCED!)
-          <video
-            ref={videoRef}
+        <div className="w-full h-full relative">
+          <iframe
             src={video.url}
-            className="w-full h-full"
-            controls={isHost}
-            onTimeUpdate={handleLocalVideoTimeUpdate}
-            onPlay={handleLocalVideoPlay}
-            onPause={handleLocalVideoPause}
-            onLoadedMetadata={() => {
-              setIsReady(true)
-              onReady?.()
-            }}
-            onWaiting={() => setIsBuffering(true)}
-            onCanPlay={() => setIsBuffering(false)}
-            onLoadStart={() => setIsBuffering(true)}
-            onLoadedData={() => setIsBuffering(false)}
-            onError={handleVideoError}
-            onStalled={() => {
-              console.log('[VideoPlayer] Video stalled')
-              setIsBuffering(true)
-            }}
-            onSuspend={() => {
-              console.log('[VideoPlayer] Video suspended')
-              setIsBuffering(false)
-            }}
-            playsInline={true}
-            preload={isMobile ? "metadata" : "auto"}
-            style={{
-              objectFit: 'contain',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              willChange: isMobile ? 'auto' : 'transform',
-              backfaceVisibility: 'hidden',
-              perspective: 1000
-            }}
+            className="w-full h-full border-0"
+            allowFullScreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            referrerPolicy="origin"
+            style={{ pointerEvents: isHost ? 'auto' : 'none' }}
           />
-        ) : (
-          // Embed fallback - USE IFRAME (NOT SYNCED)
-          <div className="w-full h-full relative">
-            <iframe
-              src={video.embedUrl || video.url}
-              className="w-full h-full border-0"
-              allowFullScreen
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              referrerPolicy="origin"
-              style={{ pointerEvents: isHost ? 'auto' : 'none' }}
-            />
-            {/* Overlay for non-host users to prevent interaction */}
-            {!isHost && (
-              <div className="absolute inset-0 bg-transparent pointer-events-auto cursor-not-allowed" />
-            )}
-
-            {/* Warning overlay for non-synced content */}
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-600/90 text-white px-4 py-2 rounded-lg text-sm shadow-lg z-10 max-w-md text-center">
-              ⚠️ This video cannot be synced. Use chat to coordinate playback!
-            </div>
-          </div>
-        )
+          {/* Overlay for non-host users to prevent interaction */}
+          {!isHost && (
+            <div className="absolute inset-0 bg-transparent pointer-events-auto cursor-not-allowed" />
+          )}
+        </div>
       ) : (
         <video
           ref={videoRef}

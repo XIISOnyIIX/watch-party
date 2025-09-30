@@ -19,7 +19,6 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
   const [selectedSeason, setSelectedSeason] = useState<number>(1)
   const [selectedEpisode, setSelectedEpisode] = useState<number>(1)
   const [isLoadingSeasons, setIsLoadingSeasons] = useState(false)
-  const [isExtractingStream, setIsExtractingStream] = useState(false)
 
   // Search with debounce
   useEffect(() => {
@@ -63,79 +62,42 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
     setSelectedItem(item)
   }
 
-  const handlePlayClick = async (item?: TMDBSearchResult) => {
+  const handlePlayClick = (item?: TMDBSearchResult) => {
     const itemToPlay = item || selectedItem
     if (!itemToPlay) return
 
     const isMovie = itemToPlay.media_type === 'movie'
     const tmdbId = itemToPlay.id.toString()
 
-    // Show extracting state
-    setIsExtractingStream(true)
+    // Construct embed URL
+    const embedUrl = isMovie
+      ? `https://moviesapi.club/movie/${tmdbId}`
+      : `https://moviesapi.club/tv/${tmdbId}-${selectedSeason}-${selectedEpisode}`
 
-    try {
-      // Construct embed URL
-      const embedUrl = isMovie
-        ? `https://moviesapi.club/movie/${tmdbId}`
-        : `https://moviesapi.club/tv/${tmdbId}-${selectedSeason}-${selectedEpisode}`
-
-      // Try to extract direct stream URL via our API
-      const params = new URLSearchParams({
-        tmdbId,
-        type: isMovie ? 'movie' : 'tv',
-        ...(isMovie ? {} : {
-          season: selectedSeason.toString(),
-          episode: selectedEpisode.toString()
-        })
-      })
-
-      let streamUrl: string | null = null
-      let isStreaming = false
-
-      try {
-        const response = await fetch(`/api/stream?${params}`)
-        const data = await response.json()
-
-        if (data.success && data.streamUrl) {
-          streamUrl = data.streamUrl
-          isStreaming = true
-          console.log('[MovieSearch] Stream extraction successful:', streamUrl)
-        } else {
-          console.log('[MovieSearch] Stream extraction failed, using embed fallback')
-        }
-      } catch (error) {
-        console.error('[MovieSearch] Error calling stream API:', error)
-      }
-
-      const video: Video = {
-        id: `${itemToPlay.media_type}-${tmdbId}${isMovie ? '' : `-${selectedSeason}-${selectedEpisode}`}`,
-        title: isMovie
-          ? `${itemToPlay.title || itemToPlay.name}${itemToPlay.release_date ? ` (${itemToPlay.release_date.split('-')[0]})` : ''}`
-          : `${itemToPlay.name || itemToPlay.title} S${selectedSeason}E${selectedEpisode}`,
-        type: isMovie ? 'movie' : 'tv',
-        url: streamUrl || embedUrl, // Use stream URL if available, otherwise embed
-        embedUrl: embedUrl,
-        thumbnail: getPosterUrl(itemToPlay.poster_path),
-        tmdbId,
-        season: isMovie ? undefined : selectedSeason,
-        episode: isMovie ? undefined : selectedEpisode,
-        year: itemToPlay.release_date
-          ? parseInt(itemToPlay.release_date.split('-')[0])
-          : itemToPlay.first_air_date
-          ? parseInt(itemToPlay.first_air_date.split('-')[0])
-          : undefined,
-        isStreaming: isStreaming
-      }
-
-      onVideoSelect(video)
-
-      // Reset state
-      setSelectedItem(null)
-      setSearchQuery('')
-      setSearchResults([])
-    } finally {
-      setIsExtractingStream(false)
+    const video: Video = {
+      id: `${itemToPlay.media_type}-${tmdbId}${isMovie ? '' : `-${selectedSeason}-${selectedEpisode}`}`,
+      title: isMovie
+        ? `${itemToPlay.title || itemToPlay.name}${itemToPlay.release_date ? ` (${itemToPlay.release_date.split('-')[0]})` : ''}`
+        : `${itemToPlay.name || itemToPlay.title} S${selectedSeason}E${selectedEpisode}`,
+      type: isMovie ? 'movie' : 'tv',
+      url: embedUrl,
+      thumbnail: getPosterUrl(itemToPlay.poster_path),
+      tmdbId,
+      season: isMovie ? undefined : selectedSeason,
+      episode: isMovie ? undefined : selectedEpisode,
+      year: itemToPlay.release_date
+        ? parseInt(itemToPlay.release_date.split('-')[0])
+        : itemToPlay.first_air_date
+        ? parseInt(itemToPlay.first_air_date.split('-')[0])
+        : undefined
     }
+
+    onVideoSelect(video)
+
+    // Reset state
+    setSelectedItem(null)
+    setSearchQuery('')
+    setSearchResults([])
   }
 
   const filteredResults = searchResults.filter(item => item.media_type === selectedType)
@@ -278,7 +240,29 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
 
       {/* Search Results Grid */}
       {searchResults.length > 0 && !selectedItem && (
-        <div className="max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+        <div
+          className="max-h-96 overflow-y-auto pr-2"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#4B5563 #1F2937'
+          }}
+        >
+          <style jsx>{`
+            div::-webkit-scrollbar {
+              width: 8px;
+            }
+            div::-webkit-scrollbar-track {
+              background: #1F2937;
+              border-radius: 4px;
+            }
+            div::-webkit-scrollbar-thumb {
+              background: #4B5563;
+              border-radius: 4px;
+            }
+            div::-webkit-scrollbar-thumb:hover {
+              background: #6B7280;
+            }
+          `}</style>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {filteredResults.map((item) => (
               <div
@@ -290,7 +274,7 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
                     handleItemClick(item)
                   }
                 }}
-                className="group cursor-pointer bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-purple-500 transition-all transform hover:scale-105"
+                className="group cursor-pointer bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/50"
               >
                 <div className="aspect-[2/3] relative">
                   <img
@@ -358,16 +342,6 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
         </div>
       )}
 
-      {/* Extracting Stream Loading Overlay */}
-      {isExtractingStream && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" style={{ position: 'fixed', top: 0, left: 0 }}>
-          <div className="bg-gray-800 rounded-lg p-8 text-white max-w-md mx-4 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mx-auto mb-4"></div>
-            <p className="text-lg font-medium mb-2">Extracting Stream...</p>
-            <p className="text-sm text-gray-300">This may take a few seconds</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
