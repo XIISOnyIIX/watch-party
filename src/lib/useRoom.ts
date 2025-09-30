@@ -34,6 +34,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
   const userIdRef = useRef<string>()
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const prevUserCountRef = useRef<number>(0)
 
   // Initialize user ID
   if (!userIdRef.current) {
@@ -50,12 +51,12 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       const response = await fetch(`/api/rooms/${roomId}`)
       if (response.ok) {
         const data = await response.json()
-        const userCountBefore = room?.users?.length || 0
         const userCountAfter = data.room?.users?.length || 0
 
-        // Only log when user count actually changes
-        if (userCountBefore !== userCountAfter) {
-          console.log(`[useRoom] Users changed: ${userCountBefore} → ${userCountAfter}`)
+        // Only log when user count actually changes from last known value
+        if (prevUserCountRef.current !== userCountAfter) {
+          console.log(`[useRoom] Users changed: ${prevUserCountRef.current} → ${userCountAfter}`)
+          prevUserCountRef.current = userCountAfter
         }
 
         setRoom(data.room)
@@ -78,7 +79,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     } catch (error) {
       console.error('[useRoom] Error refetching room:', error)
     }
-  }, [roomId, userId, room?.users?.length])
+  }, [roomId, userId])
 
   // Helper function to refetch messages
   const refetchMessages = useCallback(async () => {
