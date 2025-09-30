@@ -47,14 +47,17 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   // Helper function to refetch room data
   const refetchRoomData = useCallback(async () => {
     try {
-      console.log(`[useRoom] Refetching room data for room ${roomId}`)
       const response = await fetch(`/api/rooms/${roomId}`)
       if (response.ok) {
         const data = await response.json()
         const userCountBefore = room?.users?.length || 0
         const userCountAfter = data.room?.users?.length || 0
 
-        console.log(`[useRoom] Room data updated - users: ${userCountBefore} -> ${userCountAfter}`)
+        // Only log when user count actually changes
+        if (userCountBefore !== userCountAfter) {
+          console.log(`[useRoom] Users changed: ${userCountBefore} → ${userCountAfter}`)
+        }
+
         setRoom(data.room)
 
         const currentUser = data.room?.users?.find((u: User) => u.id === userId)
@@ -63,17 +66,14 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         }
       } else if (response.status === 404) {
         // Room was deleted (host left), clear local state
-        console.log('[useRoom] Room was deleted, clearing state')
+        console.log('[useRoom] Room deleted')
         setRoom(null)
         setUser(null)
         setIsConnected(false)
-        // Stop polling will be handled by the cleanup effect
         if (channelRef.current) {
           channelRef.current.unsubscribe()
           channelRef.current = null
         }
-      } else {
-        console.warn(`[useRoom] Failed to refetch room data: ${response.status}`)
       }
     } catch (error) {
       console.error('[useRoom] Error refetching room:', error)
@@ -100,39 +100,33 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   const startPolling = useCallback(() => {
     if (pollingIntervalRef.current) return
 
-    console.log('[useRoom] Starting polling fallback')
     pollingIntervalRef.current = setInterval(() => {
       refetchRoomData()
       refetchMessages()
-    }, 1500) // Poll every 1.5 seconds for faster user list updates
+    }, 1500)
   }, [refetchRoomData, refetchMessages])
 
   const startUserListPolling = useCallback(() => {
     if (userListPollingRef.current) return
 
-    console.log('[useRoom] Starting aggressive user list polling')
     userListPollingRef.current = setInterval(() => {
-      refetchRoomData() // Focus on user list updates
-    }, 1000) // Poll every 1 second specifically for user changes
+      refetchRoomData()
+    }, 1000)
   }, [refetchRoomData])
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current)
       pollingIntervalRef.current = null
-      console.log('[useRoom] Stopped general polling')
     }
     if (userListPollingRef.current) {
       clearInterval(userListPollingRef.current)
       userListPollingRef.current = null
-      console.log('[useRoom] Stopped user list polling')
     }
   }, [])
 
   const connectToRoom = useCallback(async () => {
     if (!userId || !roomId || channelRef.current) return
-
-    console.log(`[useRoom] Connecting to room ${roomId} as user ${userId}`)
 
     // First, initialize room via API (handles creation if needed)
     try {
@@ -145,7 +139,6 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       const response = await fetch(`/api/rooms/${roomId}/events?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
-        console.log(`[useRoom] Room ${roomId} initialized`)
         setRoom(data.room)
         setMessages(data.messages || [])
 
@@ -174,8 +167,7 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         schema: 'public',
         table: 'rooms',
         filter: `id=eq.${roomId}`
-      }, (payload) => {
-        console.log('[useRoom] Room data changed, refetching...')
+      }, () => {
         refetchRoomData()
       })
       .on('postgres_changes', {
@@ -183,9 +175,8 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         schema: 'public',
         table: 'room_users',
         filter: `room_id=eq.${roomId}`
-      }, (payload) => {
-        console.log('[useRoom] Room users changed:', payload.eventType, payload.old, payload.new)
-        // Immediate refetch for user changes - no delay
+      }, () => {
+        // Immediate refetch for user changes
         refetchRoomData()
         // Also refetch again after a short delay to catch any race conditions
         setTimeout(() => {
@@ -197,32 +188,28 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         schema: 'public',
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`
-      }, (payload) => {
-        console.log('[useRoom] New message, refetching...')
+      }, () => {
         refetchMessages()
       })
 
     // Subscribe with timeout handling
     const subscribeTimeout = setTimeout(() => {
-      console.log('[useRoom] Real-time subscription timed out, falling back to polling')
-      setIsConnected(true) // Set connected even if real-time fails
+      setIsConnected(true)
       startPolling()
-      startUserListPolling() // Start aggressive user list polling
-    }, 5000) // 5 second timeout
+      startUserListPolling()
+    }, 5000)
 
     channel.subscribe((status) => {
-      console.log(`[useRoom] Subscription status for room ${roomId}:`, status)
       if (status === 'SUBSCRIBED') {
         clearTimeout(subscribeTimeout)
         setIsConnected(true)
-        startUserListPolling() // Start user list polling even with real-time for extra reliability
-        console.log('[useRoom] Real-time connection successful')
+        startUserListPolling()
+        console.log('[useRoom] Connected')
       } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
         clearTimeout(subscribeTimeout)
-        console.log('[useRoom] Real-time connection failed, falling back to polling')
-        setIsConnected(true) // Still set connected for polling fallback
+        setIsConnected(true)
         startPolling()
-        startUserListPolling() // Start aggressive user list polling
+        startUserListPolling()
       }
     })
 
@@ -247,8 +234,6 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         ? { action, user: { ...userObj, isHost: true }, roomName }
         : { action, user: userObj }
 
-      console.log(`[useRoom] ${action === 'create' ? 'Creating' : 'Joining'} room ${roomId} as ${userName}`)
-
       const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -257,7 +242,6 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
 
       if (response.ok) {
         const data = await response.json()
-        console.log(`[useRoom] Successfully ${action === 'create' ? 'created' : 'joined'} room ${roomId}`)
         setRoom(data.room)
 
         const currentUser = data.room.users.find((u: User) => u.id === userId)
@@ -266,10 +250,9 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         }
 
         // Add a small delay to avoid race condition with serverless functions
-        console.log(`[useRoom] Waiting 1 second before connecting to SSE to avoid race condition`)
         setTimeout(() => {
           connectToRoom()
-        }, 1000) // 1 second delay
+        }, 1000)
       } else {
         const errorData = await response.text()
         console.error(`[useRoom] Failed to ${action} room ${roomId}:`, response.status, errorData)
@@ -319,13 +302,9 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, userId, stopPolling])
 
   const updateVideo = useCallback(async (video: Video | null) => {
-    if (!isHost || !roomId) {
-      console.warn('[useRoom] Cannot update video: not host or no roomId')
-      return
-    }
+    if (!isHost || !roomId) return
 
     try {
-      console.log(`[useRoom] Updating video in room ${roomId}:`, video?.title || 'null')
       const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -340,8 +319,6 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
         console.error(`[useRoom] Failed to update video:`, response.status, errorData)
         throw new Error(`Failed to update video: ${response.status}`)
       }
-
-      console.log(`[useRoom] Video updated successfully in room ${roomId}`)
     } catch (error) {
       console.error('[useRoom] Error updating video:', error)
     }
@@ -390,13 +367,9 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, user])
 
   const promoteUser = useCallback(async (targetUserId: string) => {
-    if (!isHost || !roomId || !user) {
-      console.warn('[useRoom] Cannot promote user: not host or missing data')
-      return
-    }
+    if (!isHost || !roomId || !user) return
 
     try {
-      console.log(`[useRoom] Promoting user ${targetUserId} in room ${roomId}`)
       const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -410,8 +383,6 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       if (!response.ok) {
         const errorData = await response.text()
         console.error(`[useRoom] Failed to promote user:`, response.status, errorData)
-      } else {
-        console.log(`[useRoom] User ${targetUserId} promoted successfully`)
       }
     } catch (error) {
       console.error('[useRoom] Error promoting user:', error)
@@ -419,13 +390,9 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
   }, [roomId, isHost, user])
 
   const demoteUser = useCallback(async (targetUserId: string) => {
-    if (!isHost || !roomId || !user) {
-      console.warn('[useRoom] Cannot demote user: not host or missing data')
-      return
-    }
+    if (!isHost || !roomId || !user) return
 
     try {
-      console.log(`[useRoom] Demoting user ${targetUserId} in room ${roomId}`)
       const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -439,8 +406,6 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
       if (!response.ok) {
         const errorData = await response.text()
         console.error(`[useRoom] Failed to demote user:`, response.status, errorData)
-      } else {
-        console.log(`[useRoom] User ${targetUserId} demoted successfully`)
       }
     } catch (error) {
       console.error('[useRoom] Error demoting user:', error)
@@ -481,9 +446,8 @@ export function useRoom({ roomId, userName }: UseRoomProps): UseRoomReturn {
     if (!roomId || !isConnected) return
 
     const forceRefreshInterval = setInterval(() => {
-      console.log('[useRoom] Force refresh backup - checking for missed updates')
       refetchRoomData()
-    }, 30000) // Every 30 seconds
+    }, 30000)
 
     return () => {
       clearInterval(forceRefreshInterval)

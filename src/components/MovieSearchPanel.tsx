@@ -62,11 +62,12 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
     setSelectedItem(item)
   }
 
-  const handlePlayClick = () => {
-    if (!selectedItem) return
+  const handlePlayClick = (item?: TMDBSearchResult) => {
+    const itemToPlay = item || selectedItem
+    if (!itemToPlay) return
 
-    const isMovie = selectedItem.media_type === 'movie'
-    const tmdbId = selectedItem.id.toString()
+    const isMovie = itemToPlay.media_type === 'movie'
+    const tmdbId = itemToPlay.id.toString()
 
     // Construct moviesapi.to URL
     const embedUrl = isMovie
@@ -74,20 +75,20 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
       : `https://moviesapi.club/tv/${tmdbId}-${selectedSeason}-${selectedEpisode}`
 
     const video: Video = {
-      id: `${selectedItem.media_type}-${tmdbId}${isMovie ? '' : `-${selectedSeason}-${selectedEpisode}`}`,
+      id: `${itemToPlay.media_type}-${tmdbId}${isMovie ? '' : `-${selectedSeason}-${selectedEpisode}`}`,
       title: isMovie
-        ? `${selectedItem.title || selectedItem.name}${selectedItem.release_date ? ` (${selectedItem.release_date.split('-')[0]})` : ''}`
-        : `${selectedItem.name || selectedItem.title} S${selectedSeason}E${selectedEpisode}`,
+        ? `${itemToPlay.title || itemToPlay.name}${itemToPlay.release_date ? ` (${itemToPlay.release_date.split('-')[0]})` : ''}`
+        : `${itemToPlay.name || itemToPlay.title} S${selectedSeason}E${selectedEpisode}`,
       type: isMovie ? 'movie' : 'tv',
       url: embedUrl,
-      thumbnail: getPosterUrl(selectedItem.poster_path),
+      thumbnail: getPosterUrl(itemToPlay.poster_path),
       tmdbId,
       season: isMovie ? undefined : selectedSeason,
       episode: isMovie ? undefined : selectedEpisode,
-      year: selectedItem.release_date
-        ? parseInt(selectedItem.release_date.split('-')[0])
-        : selectedItem.first_air_date
-        ? parseInt(selectedItem.first_air_date.split('-')[0])
+      year: itemToPlay.release_date
+        ? parseInt(itemToPlay.release_date.split('-')[0])
+        : itemToPlay.first_air_date
+        ? parseInt(itemToPlay.first_air_date.split('-')[0])
         : undefined
     }
 
@@ -246,8 +247,7 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
                 key={`${item.media_type}-${item.id}`}
                 onClick={() => {
                   if (item.media_type === 'movie') {
-                    setSelectedItem(item)
-                    handlePlayClick()
+                    handlePlayClick(item)
                   } else {
                     handleItemClick(item)
                   }
