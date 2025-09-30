@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import NodeCache from 'node-cache'
-import { makeProviders, makeStandardFetcher, targets } from '@movie-web/providers'
+import puppeteer from 'puppeteer'
 
 // Cache extracted URLs for 2 hours to reduce API calls
 const cache = new NodeCache({ stdTTL: 7200 })
 
-// Create providers instance (reuse across requests)
-let providersInstance: ReturnType<typeof makeProviders> | null = null
+// Browser instance (reuse for performance)
+let browserInstance: any = null
 
-function getProvidersInstance() {
-  if (!providersInstance) {
-    providersInstance = makeProviders({
-      fetcher: makeStandardFetcher(fetch),
-      target: targets.NATIVE // For Node.js server-side
+async function getBrowser() {
+  if (!browserInstance) {
+    browserInstance = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
     })
   }
-  return providersInstance
+  return browserInstance
 }
 
 export async function GET(request: NextRequest) {
@@ -60,85 +65,92 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // Construct embed URL for fallback
+  // Construct embed URL
   const embedUrl = type === 'movie'
     ? `https://moviesapi.club/movie/${tmdbId}`
     : `https://moviesapi.club/tv/${tmdbId}-${season}-${episode}`
 
-  console.log(`[Stream API] Extracting stream using @movie-web/providers for TMDB ID: ${tmdbId}`)
+  console.log(`[Stream API] Extracting stream using Puppeteer for: ${embedUrl}`)
+
+  let page: any = null
 
   try {
-    const providers = getProvidersInstance()
+    const browser = await getBrowser()
+    page = await browser.newPage()
 
-    // Build media object for providers
-    const media: any = {
-      type: type === 'movie' ? 'movie' : 'show',
-      tmdbId
-    }
+    // Intercept network requests to capture video URLs
+    const videoUrls: string[] = []
 
-    // Add season/episode for TV shows
-    if (type === 'tv') {
-      media.season = {
-        number: parseInt(season!),
-        tmdbId: tmdbId // Can use same tmdbId for now
+    await page.setRequestInterception(true)
+    page.on('request', (req: any) => {
+      req.continue()
+    })
+
+    page.on('response', async (response: any) => {
+      const url = response.url()
+      const contentType = response.headers()['content-type'] || ''
+
+      // Capture video URLs (mp4, m3u8, etc.)
+      if (
+        url.includes('.mp4') ||
+        url.includes('.m3u8') ||
+        contentType.includes('video') ||
+        contentType.includes('mpegurl')
+      ) {
+        console.log(`[Stream API] Captured video URL: ${url}`)
+        videoUrls.push(url)
       }
-      media.episode = {
-        number: parseInt(episode!),
-        tmdbId: tmdbId // Can use same tmdbId for now
-      }
-    }
+    })
 
-    console.log('[Stream API] Media object:', JSON.stringify(media))
+    // Navigate to embed page
+    await page.goto(embedUrl, {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    })
 
-    // Run all providers to find a stream
-    const output = await providers.runAll({ media })
+    // Wait a bit for video to load
+    await page.waitForTimeout(3000)
 
-    if (output && output.stream) {
-      // Extract the best quality stream URL
-      let streamUrl: string | null = null
-      let quality = 'unknown'
-
-      const stream = output.stream
-
-      // Try to get the highest quality available
-      if (stream.type === 'file' && stream.qualities) {
-        // Try in order: 1080, 720, 480, 360, etc.
-        const qualities = Object.keys(stream.qualities).sort((a, b) => parseInt(b) - parseInt(a))
-        if (qualities.length > 0) {
-          const bestQuality = qualities[0]
-          const qualityEntry = (stream.qualities as any)[bestQuality]
-          if (qualityEntry && qualityEntry.url) {
-            streamUrl = qualityEntry.url
-            quality = bestQuality
-          }
-        }
-      } else if (stream.type === 'hls' && (stream as any).playlist) {
-        // HLS stream
-        streamUrl = (stream as any).playlist
-        quality = 'HLS'
+    // Try to extract video src from page
+    const videoSrc = await page.evaluate(() => {
+      const video = document.querySelector('video') as HTMLVideoElement | null
+      if (video && video.src) {
+        return video.src
       }
 
-      if (streamUrl) {
-        const result = {
-          streamUrl,
-          embedUrl,
-          type,
-          quality,
-          sourceId: output.sourceId,
-          subtitles: stream.captions || [],
-          cached: false
-        }
-
-        // Cache the result
-        cache.set(cacheKey, result)
-
-        console.log(`[Stream API] Successfully extracted ${quality} stream for ${cacheKey} from ${output.sourceId}`)
-
-        return NextResponse.json({
-          success: true,
-          ...result
-        })
+      // Check for source elements
+      const source = document.querySelector('video source') as HTMLSourceElement | null
+      if (source && source.src) {
+        return source.src
       }
+
+      return null
+    })
+
+    await page.close()
+    page = null
+
+    // Use extracted video src or captured URL
+    const streamUrl = videoSrc || (videoUrls.length > 0 ? videoUrls[0] : null)
+
+    if (streamUrl && streamUrl !== 'about:blank') {
+      const result = {
+        streamUrl,
+        embedUrl,
+        type,
+        quality: 'auto',
+        cached: false
+      }
+
+      // Cache the result
+      cache.set(cacheKey, result)
+
+      console.log(`[Stream API] Successfully extracted stream for ${cacheKey}`)
+
+      return NextResponse.json({
+        success: true,
+        ...result
+      })
     }
 
     // If extraction failed, return fallback info
@@ -153,6 +165,15 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('[Stream API] Error:', error.message)
+
+    // Close page if still open
+    if (page) {
+      try {
+        await page.close()
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
 
     return NextResponse.json({
       success: false,
