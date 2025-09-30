@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@movie-web/providers": "^2.4.13",
     "@supabase/supabase-js": "^2.58.0",
     "@vercel/blob": "^0.23.0",
     "axios": "^1.12.2",

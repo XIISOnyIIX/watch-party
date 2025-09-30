@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import axios from 'axios'
-import * as cheerio from 'cheerio'
 import NodeCache from 'node-cache'
+import { makeProviders, makeStandardFetcher, targets } from '@movie-web/providers'
 
 // Cache extracted URLs for 2 hours to reduce API calls
 const cache = new NodeCache({ stdTTL: 7200 })
+
+// Create providers instance (reuse across requests)
+let providersInstance: ReturnType<typeof makeProviders> | null = null
+
+function getProvidersInstance() {
+  if (!providersInstance) {
+    providersInstance = makeProviders({
+      fetcher: makeStandardFetcher(fetch),
+      target: targets.NATIVE // For Node.js server-side
+    })
+  }
+  return providersInstance
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -48,133 +60,89 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // Construct embed URL
+  // Construct embed URL for fallback
   const embedUrl = type === 'movie'
     ? `https://moviesapi.club/movie/${tmdbId}`
     : `https://moviesapi.club/tv/${tmdbId}-${season}-${episode}`
 
-  console.log(`[Stream API] Extracting stream from: ${embedUrl}`)
+  console.log(`[Stream API] Extracting stream using @movie-web/providers for TMDB ID: ${tmdbId}`)
 
   try {
-    // Fetch the embed page
-    const response = await axios.get(embedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Referer': 'https://moviesapi.club/'
-      },
-      timeout: 10000 // 10 second timeout
-    })
+    const providers = getProvidersInstance()
 
-    const $ = cheerio.load(response.data)
-
-    let videoUrl: string | null = null
-    let subtitles: any[] = []
-
-    // Method 1: Look for direct video source tags
-    const videoSource = $('video source').attr('src')
-    if (videoSource) {
-      console.log(`[Stream API] Found video source tag: ${videoSource}`)
-      videoUrl = videoSource
+    // Build media object for providers
+    const media: any = {
+      type: type === 'movie' ? 'movie' : 'show',
+      tmdbId
     }
 
-    // Method 2: Look for m3u8 URLs in script tags (HLS streams)
-    if (!videoUrl) {
-      const scripts = $('script').toArray()
-      for (const script of scripts) {
-        const scriptContent = $(script).html() || ''
-
-        // Look for m3u8 URLs
-        const m3u8Match = scriptContent.match(/https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*/i)
-        if (m3u8Match) {
-          console.log(`[Stream API] Found m3u8 URL in script: ${m3u8Match[0]}`)
-          videoUrl = m3u8Match[0]
-          break
-        }
-
-        // Look for mp4 URLs
-        if (!videoUrl) {
-          const mp4Match = scriptContent.match(/https?:\/\/[^"'`\s]+\.mp4[^"'`\s]*/i)
-          if (mp4Match) {
-            console.log(`[Stream API] Found mp4 URL in script: ${mp4Match[0]}`)
-            videoUrl = mp4Match[0]
-            break
-          }
-        }
+    // Add season/episode for TV shows
+    if (type === 'tv') {
+      media.season = {
+        number: parseInt(season!),
+        tmdbId: tmdbId // Can use same tmdbId for now
+      }
+      media.episode = {
+        number: parseInt(episode!),
+        tmdbId: tmdbId // Can use same tmdbId for now
       }
     }
 
-    // Method 3: Look for iframe with video player
-    if (!videoUrl) {
-      const iframe = $('iframe').first()
-      const iframeSrc = iframe.attr('src')
+    console.log('[Stream API] Media object:', JSON.stringify(media))
 
-      if (iframeSrc && !iframeSrc.includes('about:blank')) {
-        console.log(`[Stream API] Found iframe: ${iframeSrc}`)
+    // Run all providers to find a stream
+    const output = await providers.runAll({ media })
 
-        // Try to fetch iframe content
-        try {
-          const fullIframeUrl = iframeSrc.startsWith('http') ? iframeSrc : `https:${iframeSrc}`
-          const iframeResponse = await axios.get(fullIframeUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Referer': embedUrl
-            },
-            timeout: 10000
-          })
+    if (output && output.stream) {
+      // Extract the best quality stream URL
+      let streamUrl: string | null = null
+      let quality = 'unknown'
 
-          const $iframe = cheerio.load(iframeResponse.data)
+      const stream = output.stream
 
-          // Try to find video in iframe
-          const iframeVideoSource = $iframe('video source').attr('src')
-          if (iframeVideoSource) {
-            console.log(`[Stream API] Found video in iframe: ${iframeVideoSource}`)
-            videoUrl = iframeVideoSource
+      // Try to get the highest quality available
+      if (stream.type === 'file' && stream.qualities) {
+        // Try in order: 1080, 720, 480, 360, etc.
+        const qualities = Object.keys(stream.qualities).sort((a, b) => parseInt(b) - parseInt(a))
+        if (qualities.length > 0) {
+          const bestQuality = qualities[0]
+          const qualityEntry = (stream.qualities as any)[bestQuality]
+          if (qualityEntry && qualityEntry.url) {
+            streamUrl = qualityEntry.url
+            quality = bestQuality
           }
-
-          // Look for m3u8 in iframe scripts
-          if (!videoUrl) {
-            const iframeScripts = $iframe('script').toArray()
-            for (const script of iframeScripts) {
-              const scriptContent = $iframe(script).html() || ''
-              const m3u8Match = scriptContent.match(/https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*/i)
-              if (m3u8Match) {
-                console.log(`[Stream API] Found m3u8 in iframe script: ${m3u8Match[0]}`)
-                videoUrl = m3u8Match[0]
-                break
-              }
-            }
-          }
-        } catch (iframeError) {
-          console.log(`[Stream API] Could not fetch iframe content:`, iframeError)
         }
-      }
-    }
-
-    // If we found a video URL, cache and return it
-    if (videoUrl) {
-      const result = {
-        streamUrl: videoUrl,
-        embedUrl,
-        type,
-        subtitles,
-        cached: false
+      } else if (stream.type === 'hls' && (stream as any).playlist) {
+        // HLS stream
+        streamUrl = (stream as any).playlist
+        quality = 'HLS'
       }
 
-      // Cache the result
-      cache.set(cacheKey, result)
+      if (streamUrl) {
+        const result = {
+          streamUrl,
+          embedUrl,
+          type,
+          quality,
+          sourceId: output.sourceId,
+          subtitles: stream.captions || [],
+          cached: false
+        }
 
-      console.log(`[Stream API] Successfully extracted stream for ${cacheKey}`)
+        // Cache the result
+        cache.set(cacheKey, result)
 
-      return NextResponse.json({
-        success: true,
-        ...result
-      })
+        console.log(`[Stream API] Successfully extracted ${quality} stream for ${cacheKey} from ${output.sourceId}`)
+
+        return NextResponse.json({
+          success: true,
+          ...result
+        })
+      }
     }
 
     // If extraction failed, return fallback info
-    console.log(`[Stream API] Could not extract stream from ${embedUrl}`)
+    console.log(`[Stream API] Could not extract stream for ${cacheKey}`)
 
     return NextResponse.json({
       success: false,
