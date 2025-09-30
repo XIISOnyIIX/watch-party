@@ -263,13 +263,13 @@ export default function MovieSearchPanel({ onVideoSelect, isHost }: MovieSearchP
             }
           `}</style>
           <div
-            className="movie-scroll max-h-96 overflow-y-auto overflow-x-hidden pr-3"
+            className="movie-scroll max-h-96 overflow-y-auto pr-3"
             style={{
               scrollbarWidth: 'thin',
               scrollbarColor: '#667eea #1a1a2e'
             }}
           >
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pb-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 px-1 pb-2">
             {filteredResults.map((item) => (
               <div
                 key={`${item.media_type}-${item.id}`}
