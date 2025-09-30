@@ -314,20 +314,13 @@ export default function VideoPlayer({
           />
         </div>
       ) : video.type === 'movie' || video.type === 'tv' ? (
-        <div className="w-full h-full relative">
-          <iframe
-            src={video.url}
-            className="w-full h-full border-0"
-            allowFullScreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            referrerPolicy="origin"
-            style={{ pointerEvents: isHost ? 'auto' : 'none' }}
-          />
-          {/* Overlay for non-host users to prevent interaction */}
-          {!isHost && (
-            <div className="absolute inset-0 bg-transparent pointer-events-auto cursor-not-allowed" />
-          )}
-        </div>
+        <iframe
+          src={video.url}
+          className="w-full h-full border-0"
+          allowFullScreen
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          referrerPolicy="origin"
+        />
       ) : (
         <video
           ref={videoRef}
